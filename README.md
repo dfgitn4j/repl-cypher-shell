@@ -6,37 +6,27 @@
 -----
 <table>
     <tr>
-        <th>Unix shell</th>
-        <th>Cmd.exe</th>
+        <th>Sublime Text 3</th>
     </tr>
     <tr>
-        <td width="50%">
-            <a href="images/subline.gif">
+        <td width="100%">
+            <a href="images/sublime.gif">
                 <img src="images/sublime.gif" width="100%">
             </a>
         </td>
-        <td width="50%">
-            <a href="https://user-images.githubusercontent.com/1690993/41786131-a625d870-7612-11e8-882d-f1574184faba.gif">
-                <img src="https://user-images.githubusercontent.com/1690993/41786131-a625d870-7612-11e8-882d-f1574184faba.gif" width="100%">
-            </a>
-        </td>
     </tr>
     <tr>
-        <th>Terminal in panel</th>
-        <th>Support <a href="https://www.iterm2.com/documentation-images.html">showing images</a></th>
+        <th>Atom</th>
     </tr>
     <tr>
-        <td width="50%">
-            <a href="https://user-images.githubusercontent.com/1690993/41784748-a7ed9d90-760e-11e8-8979-dd341933f1bb.gif">
-                <img src="https://user-images.githubusercontent.com/1690993/41784748-a7ed9d90-760e-11e8-8979-dd341933f1bb.gif" width="100%">
+        <td width="100%">
+            <a href=images/atom.gif">
+                <img src="images/atom.gif" width="100%">
             </a>
-        </td>
-        <td width="50%">
-            <img src="https://user-images.githubusercontent.com/1690993/51725223-1dfa3780-202f-11e9-9600-6e24b78d562d.png" width="100%">
         </td>
     </tr>
 </table>
-![](images/cypher-shell-less-atom.gif)
+
 
  ## _Why?_
  
