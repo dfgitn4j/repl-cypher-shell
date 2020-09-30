@@ -11,8 +11,8 @@
     </tr>
     <tr>
         <td width="50%">
-            <a href="images/cypher-shell-less-atom.gif">
-                <img src="images/cypher-shell-less-atom.gif" width="100%">
+            <a href="images/subline.gif">
+                <img src="images/sublime.gif" width="100%">
             </a>
         </td>
         <td width="50%">

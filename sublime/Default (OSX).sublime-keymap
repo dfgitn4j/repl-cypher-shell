@@ -1,14 +1,30 @@
 [
 	{
-        "keys": ["ctrl+enter"],
+        "keys": ["ctrl+shift+0"],
         "command": "send_selection_to_terminus",
+        "args": {
+            "visible_only": "True", 
+            "add_ctl_d": false
+        },
         "context": [
             { "key": "selection_empty", "operator": "equal", "operand": false },
             { "key": "num_selections", "operator": "equal", "operand": 1 }
         ]
     },
     {
-        "keys": ["ctrl+shift+0"],
+        "keys": ["ctrl+shift+1"],
+        "command": "send_selection_to_terminus",
+        "args": {
+            "visible_only": "True", 
+            "add_ctl_d": true
+        },
+        "context": [
+            { "key": "selection_empty", "operator": "equal", "operand": false },
+            { "key": "num_selections", "operator": "equal", "operand": 1 }
+        ]
+    },
+    {
+        "keys": ["ctrl+shift+2"],
         "command": "send_selections",
         "context": [
             { "key": "selection_empty", "operator": "equal", "operand": false },
