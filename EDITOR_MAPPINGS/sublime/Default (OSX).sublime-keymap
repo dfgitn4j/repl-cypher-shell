@@ -1,0 +1,59 @@
+[
+	{
+        "keys": ["ctrl+shift+0"],
+        "command": "send_selection_to_terminus",
+        "args": {
+            "visible_only": "True", 
+            "add_ctl_d": false
+        },
+        "context": [
+            { "key": "selection_empty", "operator": "equal", "operand": false },
+            { "key": "num_selections", "operator": "equal", "operand": 1 }
+        ]
+    },
+    {
+        "keys": ["ctrl+shift+1"],
+        "command": "send_selection_to_terminus",
+        "args": {
+            "visible_only": "True", 
+            "add_ctl_d": true
+        },
+        "context": [
+            { "key": "selection_empty", "operator": "equal", "operand": false },
+            { "key": "num_selections", "operator": "equal", "operand": 1 }
+        ]
+    },
+    {
+        "keys": ["ctrl+shift+2"],
+        "command": "send_selections",
+        "context": [
+            { "key": "selection_empty", "operator": "equal", "operand": false },
+            { "key": "num_selections", "operator": "equal", "operand": 1 }
+        ]
+    },
+    {
+        "keys": ["ctrl+p"], "command": "terminus_open", "args": {
+            "cwd": "${file_path:${folder}}",
+            "panel_name": "Terminus"
+        }
+    },
+    {
+        "keys": ["ctrl+t"], "command": "terminus_open", "args": {
+            "cwd": "${file_path:${folder}}"
+    	}
+    },
+    {
+         "keys": ["ctrl+shift+t"], "command": "terminus_close", 
+           "context": [{ "key": "terminus_view"}]
+    },
+    { 
+        "keys": ["shift+escape"], 
+        "command": "show_panel", 
+        "args": {"panel": "Terminus"},
+        "context": [
+            {"key": "terminus_view.exec_panel_exists", "operand": true},
+            {"key": "terminus_view.exec_panel_visible", "operand": true}
+        ]
+    }
+
+]    

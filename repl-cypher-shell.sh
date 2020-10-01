@@ -17,8 +17,8 @@ usage() {
  NAME
 
   ${shellName}
-   - run cypher statements input via a cut-and-paste method and send output
-     through a pager (default is less).
+   - Frontend to cypher-shell with REPL flavor on command line, in a text editor embedded
+     terminal (e.g. Sublime Text, atom, VSCode, IntelliJ), with output sent through a pager. 
 
  SYNOPSIS
 
@@ -245,12 +245,11 @@ dashHelpOutput() {
 
  INSTALLATION
 
-  1. Validate that the version of cypher-shell version is first in your PATH
-     and is compatible with the targeted version of Neo4j.  Suggesting using 4.x
-     version of cypher-shell. Or use the --cypher-shell parameter to specify a 
-     cypher-shell installation to use. 
+  1. Install cypher-shell and validate that it is compatible with the targeted version(s) of 
+     the Neo4j Graph Database.  Suggesting using a 4.x version of cypher-shell. Alternative is
+     to use the --cypher-shell parameter to specify a cypher-shell installation to use. 
 
-  2. Download ${shellName} from github.
+  2. Download ${shellName} from github (https://github.com/dfgitn4j/repl-cypher-shell).
 
   2. Make file executable (e.g. chmod 755 ${shellName}).
 
@@ -261,7 +260,8 @@ dashHelpOutput() {
 
  EXAMPLES
 
-  See github for visual examples using embeddedd terminals in atom, sublime, etc.
+  See https://github.com/dfgitn4j/repl-cypher-shell for visual examples using embeddedd 
+  terminals in atom, sublime, etc.
 
   1. Run ${shellName} in a terminal environment that has in its PATH 
      environment variable a version of cypher-shell that is compatible with the 
@@ -329,6 +329,7 @@ setDefaults () {
   SESSION_ID="${RANDOM}" # nbr to id this session. For when keeping intermediate cypher files
   OUTPUT_FILES_PREFIX="qry_" # prefix all intermediate files begin with
   QRY_FILE_POSTFIX=".cypher" # prefix all intermediate files begin with
+  TIME_OUTPUT_HEADER="# query / output creation file runtime:"
   RESULTS_FILE_POSTFIX=".txt"
   TMP_FILE="tmpEditorCypherFile.${SESSION_ID}"
   TMP_DB_CONN_FILE="tmpDbConnectTest.${SESSION_ID}"
@@ -414,7 +415,7 @@ getOptArgs() {
 
   if [[ ${_nbrExpectedOpts} == 0 ]]; then
     if [[ ${1} != -* ]] && [[ ${1} ]]; then
-      messageOutput  "No option expected for ${parameter}. Bye."
+      messageOutput  "No option expected for ${_currentParam}. Bye."
       exitShell ${RCODE_INVALID_CMD_LINE_OPTS}
     fi
   elif [[ ${_nbrExpectedOpts} -eq 1 ]]; then
@@ -432,7 +433,7 @@ getOptArgs() {
       while [[ ${1} != -*  &&  ${1} ]] ; do
         _retOpts="${_retOpts}${1}"
         if [[ ${_nbrExpectedOpts} -ne -1 ]] && [[ ${_shiftCnt} -gt  ${_nbrExpectedOpts} ]]; then
-          messageOutput "Wrong options for ${parameter}. Bye."
+          messageOutput "Wrong options for ${_currentParam}. Bye."
           exitShell ${RCODE_INVALID_CMD_LINE_OPTS}
         fi
         (( _shiftCnt++ ))
@@ -639,7 +640,7 @@ getArgs() {
   retCode=0 
   echo "${cypher_format_arg}" | grep -q -E ' auto | verbose | plain '
   if [[ $? -ne 0 ]]; then # invalid format option
-    messageOutput "Invalid --format option '${cypher_format_arg}'.  Bye."
+    messageOutput "Invalid --format option '${cypher_format_arg}'."
     retCode=${RCODE_INVALID_FORMAT_STR}
   fi
 
@@ -649,22 +650,22 @@ getArgs() {
   fi
 
   if [[ ${use_editor} && ${use_vi} ]]; then
-    messageOutput "Invalid command line options.  Cannot use vi and another editor at the same time. Bye."
+    messageOutput "Invalid command line options.  Cannot use vi and another editor at the same time."
     retCode=${RCODE_INVALID_CMD_LINE_OPTS}
   fi
 
   if [[ ! -z ${input_cypher_file_name} && ! -f ${input_cypher_file_name} ]]; then # missing input file
-    messageOutput "Missing file for parameter '${input_cypher_file}'. Bye."
+    messageOutput "Missing file for parameter '${input_cypher_file}'."
     retCode=${RCODE_MISSING_INPUT_FILE}
   fi
 
   if [[ ${is_pipe} == "Y" ]]; then
     have_error="N"
     if [[ ${external_editor} == "Y" ]]; then  # could do this, but why?
-      messageOutput "Cannot use external editor and pipe input at the same time. Bye."
+      messageOutput "Cannot use external editor and pipe input at the same time."
       retCode=${RCODE_INVALID_CMD_LINE_OPTS}
     elif [[ ! -z ${input_cypher_file} ]]; then
-      messageOutput "Cannot use input file and pipe input at the same time. Bye."
+      messageOutput "Cannot use input file and pipe input at the same time."
       retCode=${RCODE_INVALID_CMD_LINE_OPTS}
     fi
     if [[ ${retCode} -ne 0 ]]; then
@@ -673,7 +674,8 @@ getArgs() {
   fi
 
   if [[ ${retCode} -ne 0 ]]; then
-    usage
+    messageOutput "Command line parameters passed: ${coll_args}"
+    messageOutput "Good Bye."
     exitShell ${retCode}
   fi
 
@@ -732,12 +734,12 @@ exitCleanUp() {
       messageOutput "**** Don't forget about the ${fileCnt} saved files with session id ${SESSION_ID} ****"
     fi
   else # cleanup any files from this session hanging around
-    find . -depth 0 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${QRY_FILE_POSTFIX}"  -exec rm {} \;
-    find . -depth 0 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${RESULTS_FILE_POSTFIX}"  -exec rm {} \;
+    find . -maxdepth 1 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${QRY_FILE_POSTFIX}"  -exec rm {} \;
+    find . -maxdepth 1 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${RESULTS_FILE_POSTFIX}"  -exec rm {} \;
   fi
   # clean up cypher-shell message and tmp files used for less
-  find . -depth 0 -type f -name "${TMP_FILE}" -exec rm {} \; # remove message and temp file
-  find . -depth 0 -type f -name "${TMP_DB_CONN_FILE}.*"  -exec rm {} \; # remove message and temp file
+  find . -maxdepth 1 -type f -name "${TMP_FILE}" -exec rm {} \; # remove message and temp file
+  find . -maxdepth 1 -type f -name "${TMP_DB_CONN_FILE}.*"  -exec rm {} \; # remove message and temp file
   if [[ ${is_pipe} == "N" ]]; then
     stty echo sane # reset stty just in case
   fi
@@ -885,6 +887,7 @@ verifyCypherShell () {
     messageOutput "Ran: cypher-shell ${cypher_shell_cmd_line} "
     messageOutput "cypher-shell results:"
     messageOutput "$(cat ${resultsFile})"
+    rm -f ${cypherFile} ${resultsFile}
     exitShell ${cypherRetCode}
   fi
 
@@ -956,7 +959,7 @@ executionLoop () {
     cleanAndRunCypher "${user_name} ${user_password} ${use_params} ${cypherShellArgs} ${cypher_format_arg}"
 
     if [[ ${time_qry} == "Y" ]]; then # put execution time in results file
-      printf '%s %s\n\n%s' "# query / output creation file runtime:" "$(printTimeFromSeconds $(($(date +%s) - ${qry_start})))" "$(cat ${resultsFile})" >${resultsFile}
+      printf '%s %s\n\n%s' "${TIME_OUTPUT_HEADER}" "$(printTimeFromSeconds $(($(date +%s) - ${qry_start})))" "$(cat ${resultsFile})" >${resultsFile}
     fi
 
     if [[ ${cypherRetCode} -eq 0 ]]; then

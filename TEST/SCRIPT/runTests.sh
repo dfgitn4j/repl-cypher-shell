@@ -36,6 +36,8 @@ EOV
   eval "$(grep --color=never OUTPUT_FILES_PREFIX= ${TEST_SHELL} | head -1)" 
   eval "$(grep --color=never QRY_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
   eval "$(grep --color=never RESULTS_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
+  eval "$(grep --color=never TIME_OUTPUT_HEADER= ${TEST_SHELL} | head -1)"
+  
 
    # file patterns for file existence test
   saveAllFilePattern="${OUTPUT_FILES_PREFIX}.*(${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})"
@@ -68,15 +70,23 @@ EOV
 }
 
 exitShell () {
+  rm -f ${qryOutputFile}
+  exit ${1}
+}
+
+interruptShell () {
   printf "\nCtl-C pressed. Bye.\n\n"
   exec <&- # close stdin
+  printf "Last ${TEST_SHELL} output message:\n\n"
   cat ${qryOutputFile}
-  exit 1
+  exitShell 1
 }
+
 
 exitOnError () {
   if [[ ${exitOnError} == "Y" ]]; then
     printf "Encountered a testing error and stopOnError = '${exitOnError}'.  Bye."
+    rm ${qryOutputFile} 
     exit
   fi 
 }
@@ -205,9 +215,6 @@ testsToRun () {
   #  RCODE_EMPTY_INPUT=7
   #  RCODE_MISSING_INPUT_FILE=8
 
-  # PASSWORD TESTS
-  printf "\n*** Starting uid / pw tests ***\n"
-
   # set Neo4j uid / pw to a value if env vars not set
   uid="${NEO4J_USERNAME:-neo4j}"
   pw="${NEO4J_PASSWORD:-admin}"
@@ -216,7 +223,6 @@ testsToRun () {
   export NEO4J_USERNAME
   NEO4J_PASSWORD=${pw}
   export NEO4J_PASSWORD
-
 
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   exitOnError="Y" # exit if runShell fails
@@ -339,7 +345,10 @@ testsToRun () {
            "query tests - bad cypher query piped input"
 
   # QUERY INPUT TESTING 
-  printf "\n*** Starting query / input method and param tests ***\n" 
+  printf "\n*** Starting query method and param and output tests ***\n" 
+
+  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--time" "" 0 "${TIME_OUTPUT_HEADER}" \
+           "param test - test --time parameter output."
 
   runShell ${RCODE_SUCCESS} "STDIN" "${testParamQry}" "${testParamParams}" "" 0 "${testParamGrep}" \
            "param test - multiple arguments."
@@ -393,15 +402,13 @@ testsToRun () {
   runShell ${RCODE_EMPTY_INPUT} "PIPE" "" "--saveResults" "${saveResultsFilePattern}" 0 "" \
            "file tests - empty input query input save results file that will not exist."
 
-  rm ${qryOutputFile}  # remove last output file
-
   printf "\nFinished. %s: %d  %s: %d\n" ${successMsg} ${successCnt} ${errorMsg} ${errorCnt}
 }
 
 #
 # MAIN
 #
-trap exitShell SIGINT
+trap interruptShell SIGINT
 
 initVars
 
@@ -414,4 +421,5 @@ if [[ $# -gt 0 ]]; then # any param prints shell variables
 fi  
 
 testsToRun
+exitShell 0
 #./formatOutput.sh ${RESULTS_OUTPUT_FILE}
