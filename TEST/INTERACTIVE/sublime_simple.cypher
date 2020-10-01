@@ -10,7 +10,7 @@ repl-cypher-shell.sh
  // ......very
  // .........long
 MATCH (n)
-  RETURN n
+  RETURNx n
   LIMIT 10
 
 MATCH (n:Person)

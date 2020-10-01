@@ -1,0 +1,8 @@
+'atom-text-editor':
+  'ctrl-1': 'custom:termInsSelandFocus'
+
+'.platform-darwin atom-workspace':
+  'ctrl-2': 'platformio-ide-terminal:insert-custom-text-1'
+
+'atom-workspace':
+  'ctrl-4': 'my-custom-toggle'
