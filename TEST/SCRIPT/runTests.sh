@@ -12,7 +12,7 @@
 # 
 # initVars - get return code variables and values from script / set script variables
 #
-TESTSHELL='../../sTrp-cypher-shell.sh'
+TESTSHELL='../../repl-cypher-shell.sh'
 initVars () {
   vars=$(cat <<EOV
   $(cat ${TESTSHELL} | sed -E -n 's/(^.*RCODE.*=[0-9]+)(.*$)/\1/p')
@@ -27,9 +27,9 @@ EOV
   eval $vars 
   
    # get output file patterns
-  eval "$(grep --color=never OUTPUT_FILES_PREFIX= ${TESTSHELL})" 
-  eval "$(grep --color=never QRY_FILE_POSTFIX= ${TESTSHELL})"
-  eval "$(grep --color=never RESULTS_FILE_POSTFIX= ${TESTSHELL})"
+  eval "$(grep --color=never OUTPUT_FILES_PREFIX= ${TESTSHELL} | head -1)" 
+  eval "$(grep --color=never QRY_FILE_POSTFIX= ${TESTSHELL} | head -1)"
+  eval "$(grep --color=never RESULTS_FILE_POSTFIX= ${TESTSHELL} | head -1)"
 
    # file patterns for file existence test
   saveAllFilePattern="${OUTPUT_FILES_PREFIX}.*(${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})"
@@ -395,4 +395,4 @@ if [[ $# -gt 0 ]]; then # any param prints shell variables
 fi  
 
 testsToRun
-./formatOutput.sh ${outFile}
+#./formatOutput.sh ${outFile}

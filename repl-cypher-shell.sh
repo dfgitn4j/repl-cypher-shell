@@ -721,7 +721,7 @@ exitCleanUp() {
 
   if [[ -z ${OUTPUT_FILES_PREFIX} || -z ${SESSION_ID} || -z ${QRY_FILE_POSTFIX} ]]; then
     messageOutput "INTERNAL ERROR: Missing variable value \
-                  OUTPUT_FILES_PREFIX=${OUTPUT_FILES_PREFIX} SESSION_ID=${SESSION_ID} QRY_FILE_POSTFIX=${QRY_FILE_POSTFIX}"
+                  OUTPUT_FILES_PREFIX = ${OUTPUT_FILES_PREFIX} SESSION_ID = ${SESSION_ID} QRY_FILE_POSTFIX = ${QRY_FILE_POSTFIX}"
     exitShell "INTERNAL_ERROR"
   fi
 
