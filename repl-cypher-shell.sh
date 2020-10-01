@@ -334,10 +334,8 @@ setDefaults () {
   TMP_DB_CONN_FILE="tmpDbConnectTest.${SESSION_ID}"
 
   edit_cnt=0  # count number of queries run, controls stdin messaging.
-  success_run_cnt=1 # count number of RCODE_SUCCESSful runs for file names, start at 1 for saved file sequence
-
+  success_run_cnt=1 # count number of RCODE_SUCCESSful runs for file names, start at 1 since the file names are created before the query is run
  
-
   # frig'n shell differences can be
   #if [[ $(ps -p $$ -ocomm=) == "bash" ]]; then
   #  isBash=1
@@ -364,7 +362,7 @@ yesOrNo() {
 
 printContinueOrExit() {
   if [[ ${run_once} ]]; then # don't give option to continue
-    exit ${cypherRetCode}
+    exitShell ${cypherRetCode}
   fi
   if [[ ${is_pipe} == "N" ]]; then
     printf "%s" "Press Enter to continue. Ctl-C to exit ${shellName} "
@@ -734,12 +732,12 @@ exitCleanUp() {
       messageOutput "**** Don't forget about the ${fileCnt} saved files with session id ${SESSION_ID} ****"
     fi
   else # cleanup any files from this session hanging around
-    find . -maxdepth 1 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${QRY_FILE_POSTFIX}"  -exec rm {} \;
-    find . -maxdepth 1 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${RESULTS_FILE_POSTFIX}"  -exec rm {} \;
+    find . -depth 0 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${QRY_FILE_POSTFIX}"  -exec rm {} \;
+    find . -depth 0 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${RESULTS_FILE_POSTFIX}"  -exec rm {} \;
   fi
   # clean up cypher-shell message and tmp files used for less
-  find . -maxdepth 1 -type f -name "${TMP_FILE}" -exec rm {} \; # remove message and temp file
-  find . -maxdepth 1 -type f -name "${TMP_DB_CONN_FILE}.*"  -exec rm {} \; # remove message and temp file
+  find . -depth 0 -type f -name "${TMP_FILE}" -exec rm {} \; # remove message and temp file
+  find . -depth 0 -type f -name "${TMP_DB_CONN_FILE}.*"  -exec rm {} \; # remove message and temp file
   if [[ ${is_pipe} == "N" ]]; then
     stty echo sane # reset stty just in case
   fi
@@ -843,7 +841,7 @@ cleanAndRunCypher () {
 }
 
 verifyCypherShell () {
-    # connect to cypher-shell and get details
+  # connect to cypher-shell and get details
   messageOutput "Connecting to database"
   cypherFile="${TMP_DB_CONN_FILE}${QRY_FILE_POSTFIX}"
 

@@ -12,10 +12,16 @@
 # 
 # initVars - get return code variables and values from script / set script variables
 #
-TESTSHELL='../../repl-cypher-shell.sh'
+
+# vars that might need to be modified 
+TEST_SHELL='../../repl-cypher-shell.sh'
+CYPHER_SHELL="$(which cypher-shell)" # change  if want to use a different cypher-shell
+PATH=${CYPHER_SHELL}:${PATH} # put testing cypher-shell first in PATH
+RESULTS_OUTPUT_FILE=resultsTestRun.txt
+
 initVars () {
   vars=$(cat <<EOV
-  $(cat ${TESTSHELL} | sed -E -n 's/(^.*RCODE.*=[0-9]+)(.*$)/\1/p')
+  $(cat ${TEST_SHELL} | sed -E -n 's/(^.*RCODE.*=[0-9]+)(.*$)/\1/p')
 EOV
   )
 
@@ -26,10 +32,10 @@ EOV
   # create ret code variables names with value
   eval $vars 
   
-   # get output file patterns
-  eval "$(grep --color=never OUTPUT_FILES_PREFIX= ${TESTSHELL} | head -1)" 
-  eval "$(grep --color=never QRY_FILE_POSTFIX= ${TESTSHELL} | head -1)"
-  eval "$(grep --color=never RESULTS_FILE_POSTFIX= ${TESTSHELL} | head -1)"
+   # get output file patterns, assumes variable definition in script is the first pattern that matches
+  eval "$(grep --color=never OUTPUT_FILES_PREFIX= ${TEST_SHELL} | head -1)" 
+  eval "$(grep --color=never QRY_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
+  eval "$(grep --color=never RESULTS_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
 
    # file patterns for file existence test
   saveAllFilePattern="${OUTPUT_FILES_PREFIX}.*(${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})"
@@ -39,12 +45,12 @@ EOV
   successMsg="PASS"
   errorMsg="FAIL"
 
-   # outFile="resultsTestRun-$(date '+%Y-%m-%d_%H:%M:%S')".txt
-  outFile=resultsTestRun.txt
+   # RESULTS_OUTPUT_FILE="resultsTestRun-$(date '+%Y-%m-%d_%H:%M:%S')".txt
    # output file header
-  printf "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Exp Var\tPipe\tCalling Params\tDescription\n" > ${outFile}
+  printf "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tDescription\n" > ${RESULTS_OUTPUT_FILE}
 
-  qryOutputFile="qryResults.txt"
+  tmpTestFile=aFile_${RANDOM}.cypher
+  qryOutputFile="qryResults_${RANDOM}.txt"
 
   testSuccessQry="WITH 1 AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;"
   testSuccessGrep="grep -c --color=never CYPHER_SUCCESS"
@@ -73,6 +79,11 @@ exitOnError () {
     printf "Encountered a testing error and stopOnError = '${exitOnError}'.  Bye."
     exit
   fi 
+}
+
+existingFileCnt () {
+  # 1st param is the file pattern to test
+  _fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${1}" | wc -l ) 
 }
 
 # runShell ()
@@ -115,15 +126,15 @@ runShell () {
   printf "%02d. " $(( ++runCnt ))
 
   if [[ ${testType} == "STDIN" ]]; then
-    eval ${TESTSHELL} -1 ${callingParams} >${qryOutputFile} 2>/dev/null <<EOF
+    eval ${TEST_SHELL} -1 ${callingParams} >${qryOutputFile} 2>/dev/null <<EOF
     ${testQry}
 EOF
-    exitCode=$?
+  exitCode=$?
   elif [[ ${testType} == "PIPE" ]]; then
-    echo ${testQry} | eval ${TESTSHELL} ${callingParams} >${qryOutputFile} 
+    echo ${testQry} | eval ${TEST_SHELL} ${callingParams} >${qryOutputFile} 
     exitCode=$?
   elif [[ ${testType} == "FILE" ]]; then # expecting -f <filename> parameter
-    ${TESTSHELL} -1 ${callingParams} >${qryOutputFile} 
+    ${TEST_SHELL} -1 ${callingParams} >${qryOutputFile} 
     exitCode=$?
   else
     # printf "Exiting. Invalid testType specification: '${testType}' Valid entries are STDIN, PIPE, FILE.\n"
@@ -133,19 +144,20 @@ EOF
   fi 
 
    # test results
+  updateSuccessCnt="Y" # assume we're going to have successfull tests
   if [[ ${exitCode} -ne ${expectedExitCode} ]]; then
-    msg="${errorMsg}"
-    (( ++errorCnt ))
-    exitOnError 
+    updateSuccessCnt="N"
   elif [[ -z ${outputFilePattern} && -z ${grepFileContentCmd} ]]; then # no output files expected.
-    msg="${successMsg}"
-    (( ++successCnt ))
+    existingFileCnt "${saveAllFilePattern}" # should be no files. error if there is
+    if [[ ${_fileCnt} -ne 0 ]]; then
+      updateSuccessCnt="N"
+    fi
   else # file existence and file content existence tests
-    updateSuccessCnt="Y" # assume we're going to have successfull tests
     if [[ ! -z ${outputFilePattern} ]]; then # file existence checks and count tests
-      fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" | wc -l ) 
-      if [[ ${fileCnt} -eq ${expectedNbrFiles} ]]; then
-        # not using find regex for portability
+      # fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" | wc -l ) 
+      existingFileCnt "${outputFilePattern}"
+      if [[ ${_fileCnt} -eq ${expectedNbrFiles} ]]; then
+        # clean up output files. not using find regex for portability
         for rmFile in $(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" ) ; do
           rm -f ${rmFile}
         done 
@@ -155,18 +167,20 @@ EOF
     fi # validate existence and number of files
 
     if [[ ! -z ${grepFileContentCmd} && ${updateSuccessCnt} == "Y" ]]; then # have file, validate text in output. 
-      if [[ $(eval "${grepFileContentCmd} ${qryOutputFile}") -eq 0 ]]; then 
+      if [[ $(eval "${grepFileContentCmd} ${qryOutputFile}") -eq 0 ]]; then # output of grep cmd should be > 0
         updateSuccessCnt="N"
       fi
     fi
-    if [[ ${updateSuccessCnt} == "Y" ]]; then
-      msg="${successMsg}"
-      (( ++successCnt ))
-    else
-      msg="${errorMsg}"
-      (( ++errorCnt ))
-      exitOnError
-    fi 
+  fi
+
+    # set status message and update counts
+  if [[ ${updateSuccessCnt} == "Y" ]]; then
+    msg="${successMsg}"
+    (( ++successCnt ))
+  else
+    msg="${errorMsg}"
+    (( ++errorCnt ))
+    exitOnError 
   fi
 
   printf "%s  Exit Code: %d  Exp Code: %d  Input: %s\tDesc: %s\n" \
@@ -174,7 +188,7 @@ EOF
   printf "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n" \
          ${msg} ${exitCode} ${expectedExitCode} ${testType} \
          ${errVarNames[@]:${exitCode}:1} ${errVarNames[@]:${expectedExitCode}:1}  \
-         ${usePipe} "'${callingParams}'" "'${desc}'" >> ${outFile}
+         ${usePipe} "'${callingParams}'" "'${desc}'" >> ${RESULTS_OUTPUT_FILE}
 }
 
 
@@ -202,6 +216,7 @@ testsToRun () {
   export NEO4J_USERNAME
   NEO4J_PASSWORD=${pw}
   export NEO4J_PASSWORD
+
 
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   exitOnError="Y" # exit if runShell fails
@@ -236,10 +251,10 @@ testsToRun () {
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--vi" "" 0 "" \
            "invalid param test - incompatible editor argument and pipe input"
 
-  touch aFile.txt  
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--file aFile.txt" "" 0 "" \
+  touch ${tmpTestFile}
+  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--file ${tmpTestFile}" "" 0 "" \
            "invalid param test - incompatible file input and pipe input."
-  rm aFile.txt
+  rm ${tmpTestFile}
 
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--exitOnError nogood" "" 0 "" \
            "invalid param test - flag argument only, no option expected."
@@ -258,20 +273,25 @@ testsToRun () {
 
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "-t -c --quiet" "" 0 "" \
            "invalid param test - cypher-shell conflicting extra info and quiet args."
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "" "--address n0h0st" "" 0 "" \
-           "param test - bad pass-thru argument to cypher-shell."
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "" "--address n0h0st" "" 0 "" \
-           "param test - bad pass-thru argument to cypher-shell."
-
+  
   runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "" "--invalid param" "" 0 "" \
            "invalid param test - invalid parameter argument value."
 
   runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "" "--invalid param" "" 0 "" \
            "invalid param test - invalid parameter argument value."
+  runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "" "--address n0h0st" "" 0 "" \
+           "invalid param test - bad pass-thru argument to cypher-shell."
+
+  runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "" "--address n0h0st" "" 0 "" \
+           "invalid param test - bad pass-thru argument to cypher-shell."
+
+  runShell ${RCODE_CYPHER_SHELL_NOT_FOUND} "STDIN" "" "--cypher-shell /a/bad/directory/xxx" "" 0 "" \
+           "invalid param test - explicitly set cypher-shell executable with --cypher-shell."
 
   # VALID PARAM TESTS
+  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--cypher-shell ${CYPHER_SHELL}" "" 0 "" \
+           "param test - explicitly set cypher-shell executable with --cypher-shell."
+
   runShell ${RCODE_SUCCESS} "STDIN" "" "--version" "" 0 "" \
            "param test - cypher-shell one-and-done version arg."
 
@@ -333,18 +353,18 @@ testsToRun () {
   runShell ${RCODE_EMPTY_INPUT} "PIPE" "" "" "" 0 "" \
            "query tests - empty cypher query"
 
-  echo "${testSuccessQry}" > runMe.cypher
-  runShell ${RCODE_SUCCESS} "FILE" "" "--file runMe.cypher" "" 0 "${testSuccessGrep}" \
+  echo "${testSuccessQry}" > ${tmpTestFile}
+  runShell ${RCODE_SUCCESS} "FILE" "" "--file ${tmpTestFile}" "" 0 "${testSuccessGrep}" \
            "query / file tests - run external cypher file with valid query, validate output"
 
-  runShell ${RCODE_MISSING_INPUT_FILE} "FILE" "" "--file NoFile.cypher" "" 0 "" \
+  runShell ${RCODE_MISSING_INPUT_FILE} "FILE" "" "--file NoFile22432.cypher" "" 0 "" \
            "query / file tests - run external cypher file missing file"
 
-  echo "${TESTSHELL}" > runMe.cypher
-  echo "${testSuccessQry}" >> runMe.cypher
-  runShell ${RCODE_SUCCESS} "FILE" "" "--file runMe.cypher" "" 0 "" \
+  echo "${TEST_SHELL}" > ${tmpTestFile}
+  echo "${testSuccessQry}" >> ${tmpTestFile}
+  runShell ${RCODE_SUCCESS} "FILE" "" "--file ${tmpTestFile}" "" 0 "" \
            "query / file tests - executing shell name at beginning of text before cypher"
-  rm runMe.cypher
+  rm ${tmpTestFile}
 
   # SAVE FILE TESTS
   printf "\n*** Starting save file test ***\n" 
@@ -376,7 +396,6 @@ testsToRun () {
   rm ${qryOutputFile}  # remove last output file
 
   printf "\nFinished. %s: %d  %s: %d\n" ${successMsg} ${successCnt} ${errorMsg} ${errorCnt}
-  
 }
 
 #
@@ -395,4 +414,4 @@ if [[ $# -gt 0 ]]; then # any param prints shell variables
 fi  
 
 testsToRun
-#./formatOutput.sh ${outFile}
+#./formatOutput.sh ${RESULTS_OUTPUT_FILE}
