@@ -16,12 +16,12 @@
         </td>
     </tr>
     <tr>
-        <th>Atom</th>
+        <th><b>Neo4j Desktop Launched Terminal<\b></th>
     </tr>
     <tr>
         <td width="100%">
-            <a href=images/_Atom_.gif">
-                <img src="images/atom.gif" width="100%">
+            <a href=images/neoTerm.gif">
+                <img src="images/neoTerm.gif" width="100%">
             </a>
         </td>
     </tr>
@@ -166,10 +166,10 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
 
   1. Add `repl-cypher-shell.sh` in PATH if needed (e.g. /usr/local/bin)
 
-  1. Determine which `cypher-shell` to run:
+  1. Determine which `cypher-shell` to use and then run `repl-cypher-shell.sh`
     
-     1. Run `repl-cypher-shell.sh` in a terminal environment that has in its PATH environment variable a 
-        version of `cypher-shell` that is compatible with the database version being connected to. 
+     1. Run `repl-cypher-shell.sh` in a terminal environment that has a version of `cypher-shell` that is 
+        compatible with the database version being connected to in the PATH environment variable. 
 
      1. Use the `-C | --cypher-shell` command line option to specify the `cypher-shell` install. 
         This is useful when you do not have a standalone `cypher-shell` installed. To do this, open
@@ -178,23 +178,51 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
 
          `repl-cypher-shell.sh --cypher-shell ./bin/cypher-shell`
 
-  1. Run `repl-cypher-shell.sh` taking in consideration the environment described in step 1.
 
-     - Run `cypher-shell` with Neo4j database username provided and ask for a
-       password if the NEO4J_PASSWORD environment variable is not set:
- 
-          `${shellName} -u neo4j`
- 
-      - Use vi editor and keep an individual file for each cypher command run:
- 
-          `repl-cypher-shell.sh --vi`
- 
-      - Use a visual editor. Can be done, but the expected scenario is to run
-        ${shellName} from a terminal window *within* the gui editor:
- 
-        `repl-cypher-shell.sh --saveCypher -E 'subl --new-window --wait'`
+        :heavy_exclamation_mark: It's bad practice to work in the initial directory that the Neo4j Desktop launced terminal shell 
+        starts in. Mistakes happen, and _*all*_ files you created will be gone when you delete the 
+        database through Neo4j Desktop.  Suggestion is to capture the Neo4j Desktop install directory and the `cd` to 
+        another, non-Neo4j Desktop managed directory.  For example, on launching a Neo4j Desktop terminal:
 
-        `repl-cypher-shell.sh.sh -u uuu -p xxx -E '_Atom_ --new-window --wait'`
+        ```console
+        n4jdir="$(pwd)/bin/cypher-shell"
+        cd ~/MyWorkingDirectory
+        repl-cypher-shell.sh --cypher-shell $n4jdir --vi
+        ```
+
+## _Command Line Options_
+
+  repl-cypher-shell.sh
+
+    [-u | --username]        cypher-shell username parameter.
+    [-p | --password]        cypher-shell password parameter.
+    [-C | --cypher-shell]    path to cypher-shell executable to be used. Run --help for how to use.
+    [-P | --param]           cypher-shell -P | --param strings. Run --help for how to use.
+    [-f | --file]            cypher-shell -f | --file containing query. Run --help for how to use.
+    [--format]               cypher-shell --format option.
+
+    [-A | --saveAll]         save cypher query and output results files.
+    [-S | --saveCypher]      save each query statement in a file.
+    [-R | --saveResults]     save each query output in a file.
+    [-V | --vi]              use vi editor.
+    [-E | --editor] [cmd]    use external editor. See NOTES.
+    [-L | --lessOpts] [opts] use these less pager options instead of defaults.
+
+    [-t | --time]            print time elapsed between sending query and
+                             creating the results file.
+    [-c | --showCmdLn]       show script command line args in output.
+    [-q | --quiet]           minimal output.
+
+    [-1 | --one]             run query execution loop only once and exit.
+    [-N | --noLogin]         login to Neo4j database not required.
+    [-X | --exitOnError]     exit script on error.
+
+    [-U | --usage]           command line parameter usage only.
+    [-v | --version]         cypher-shell display version and exit.
+    [--driver-version]       cypher-shell display driver version and exit.
+    [-h | --help]            detailed help message.
+
+    [*] ANY other parameters are passed through as is to cypher-shell.
 
 ### BUGS:
  

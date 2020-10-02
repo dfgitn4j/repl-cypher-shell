@@ -72,20 +72,6 @@ dashHelpOutput() {
   output. There are two execution scenarios where different command line options
   can apply:
 
-  2) Command Line
-
-     Run cypher commands through ${shellName} from the command line. Cypher
-     input can be copy / paste, direct entry via an editor or stdin, or piped in.
-     The default input and editing is through stdin. It is suggested that the
-     --vi option for a seamless REPL experience. External gui editors can be
-     used but must be exited for the query to run. It is better to call 
-     ${shellName} from an terminal embedded in teh gui editor to get the same
-     REPL experience. 
-
-     Neo4j Desktop terminal provides a database compatible version of cypher-shell,
-     but you may have to use the -C | --cypher-shell parameter to tell ${shellName}
-     where to find it.
-
   1) Embedded Terminal
 
     Run cypher commands and page through output using in an IDE terminal window
@@ -102,6 +88,20 @@ dashHelpOutput() {
 
     There is a basic User package and key binding config in the EDITOR_MAPPING 
     directory.
+
+  2) Command Line
+
+     Run cypher commands through ${shellName} from the command line. Cypher
+     input can be copy / paste, direct entry via an editor or stdin, or piped in.
+     The default input and editing is through stdin. It is suggested that the
+     --vi option for a seamless REPL experience. External gui editors can be
+     used but must be exited for the query to run. It is better to call 
+     ${shellName} from an terminal embedded in a gui editor to get the same
+     REPL experience. 
+
+     Neo4j Desktop terminal provides a database compatible version of cypher-shell,
+     but you may have to use the -C | --cypher-shell parameter to tell ${shellName}
+     where to find it.
 
  OPTIONS
 
@@ -263,34 +263,89 @@ dashHelpOutput() {
   See https://github.com/dfgitn4j/repl-cypher-shell for visual examples using embeddedd 
   terminals in atom, sublime, etc.
 
-  1. Run ${shellName} in a terminal environment that has in its PATH 
-     environment variable a version of cypher-shell that is compatible with the 
-     database version being connected to. Use the -C | --cypher-shell command line option 
-     to use the cypher-shell that is part of the currently running Neo4j Destkop database 
-     installation. e.g. run from the directory you're in when a Neo4j Desktop
-     terminal is launched:
+  WINDOWED TEXT EDITOR (e.g. Sublime Text 3, atom, VSCode, etc.)
 
-       repl-cypher-shell.sh --cypher-shell ./bin/cypher-shell
+  Assuming you have this text in an editor window:
 
-  2. Add ${shellName} in PATH if needed (e.g. /usr/local/bin)
+    repl-cypher-shell.sh
 
-  3. Run ${shellName} taking in consideration the environment described in step 1.
+    MATCH (n) RETURN n LIMIT 10
+ 
+  1. Open an embeded terminal window, e.g. _terminus_ for _Sublime Text 3_ or _platformio-ide-terminal_.
+
+  2. Start  ${shellName}
+
+     - Highlight the  ${shellName} line in the editor and transfer it to the terminal window through 
+       copy-paste-into-terminal key sequence, or just copy and paste into the terminal.
+
+     - Hit Enter key in the terminal window to start the shell if needed. A user name and password will
+       be asked for if it's needed.
+
+  2. Run Cypher
+
+     - Repeat the same with the MATCH text if needed and hit ctl-D.
+
+  3. Consume Output
+
+     - Page through the output in the terminal window since it's going through less. I especially like 
+       the horizontal scrolling capabilities in less for wide rows. 
+
+  4. Repeat
+
+     - cypher-shell input is still active
+
+  NOTE: Input is through stdin so there's no real editing keys in the terminal input, but that's what the
+  editor is for. 
+
+
+  COMMAND LINE (REPL kind of workflow)
+
+  1. Add  ${shellName} in PATH if needed (e.g. /usr/local/bin)
+
+  2. Determine which cypher-shell to use and then run  ${shellName}
+    
+     a. Run  ${shellName} in a terminal environment that has a version of cypher-shell that is 
+        compatible with the database version being connected to in the PATH environment variable. 
+
+     b. Use the -C | --cypher-shell command line option to specify the cypher-shell install. 
+        This is useful when you do not have a standalone cypher-shell installed. To do this, open
+        a Neo4j Desktop terminal window for the currently running database and run this command from 
+        the command line prompt:
+
+        ${shellName} --cypher-shell ./bin/cypher-shell
+
+
+        !!! It's bad practice to work in the initial directory the shell starts
+        in if in a  Neo4j Desktop launched terminal. Mistakes happen, and _any_ files
+        you created will be gone if you delete the  database through Neo4j Desktop. 
+        Suggestion is to capture the Neo4j Desktop install directory and the cd to 
+        another, non-Neo4j Desktop managed directory.  For example, on launching a Neo4j
+        Desktop terminal:
+
+
+        n4jdir="$(pwd)/bin/cypher-shell"
+        cd ~/MyWorkingDirectory
+        ${shellName} --cypher-shell $n4jdir --vi
+
+
+  EXAMPLES
 
     - Run cypher-shell with Neo4j database username provided and ask for a
       password if the NEO4J_PASSWORD environment variable is not set:
 
         ${shellName} -u neo4j
 
-    - Use vi editor and keep an individual file for each cypher command run:
+    - Use vi editor and keep an individual file for each cypher command run and save 
+      cypher query and results output files:
 
-        sTrp-cypher-shell.sh --vi
+        sTrp-cypher-shell.sh --vi -u neo4j --time --saveAll
 
     - Use sublime as the editor. Expected scenario is to run
       ${shellName} from a terminal window *within* the gui editor:
 
        ${shellName} --saveCypher -E 'subl --new-window --wait'
 
-     See https://www.sublimetext.com/docs/3/osx_command_line.html
+      See https://www.sublimetext.com/docs/3/osx_command_line.html
 
 THISNEEDSHELP
 }
@@ -728,10 +783,22 @@ exitCleanUp() {
   saveTheFiles # cleanup intermediate files
 
   if [[ ${save_cypher} == "Y" || ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
+
+     # current edit produced $QRY_FILE_POSTFIX file may be empty
+    find . -maxdepth 1 -type f -empty -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${QRY_FILE_POSTFIX}"  -exec rm {} \;
+
+     # being medium explicit with the find and rm
      # note extra $(( )) is to remove spaces from wc result for implementations that pad with spaces
-    fileCnt=$(($(find . -maxdepth 1 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}*" -print | wc -l)))
-    if [[ ${fileCnt} -ne 0 ]]; then
-      messageOutput "**** Don't forget about the ${fileCnt} saved files with session id ${SESSION_ID} ****"
+    qryFileCnt=$(($(find . -maxdepth 1 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${QRY_FILE_POSTFIX}" -print | wc -l)))
+    outputFileCnt=$(($(find . -maxdepth 1 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${RESULTS_FILE_POSTFIX}" -print | wc -l)))
+
+    messageOutput " "
+    if [[ ${save_all} == "Y" && $(( qryFileCnt+outputFileCnt )) -ne 0 ]]; then
+      messageOutput "**** Don't forget about the saved ${qryFileCnt} (${QRY_FILE_POSTFIX}) query and ${outputFileCnt} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+    elif [[ ${save_results} && ${outputFileCnt} -ne 0 ]]; then
+      messageOutput "**** Don't forget about the saved ${outputFileCnt} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+    elif [[ ${qryFileCnt} -ne 0 ]]; then
+      messageOutput "**** Don't forget about the saved ${qryFileCnt} query files (${QRY_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
     fi
   else # cleanup any files from this session hanging around
     find . -maxdepth 1 -type f -name "${OUTPUT_FILES_PREFIX}*${SESSION_ID}${QRY_FILE_POSTFIX}"  -exec rm {} \;
@@ -761,6 +828,7 @@ exitShell() {
 
 # validate cypher-shell in PATH
 haveCypherShell () {
+
   # ck to see if you can connect to cypher-shell w/o error
   if [[ ${use_this_cypher_shell} == "" ]]; then
     if [[ $(which cypher-shell > /dev/null;echo $?) -ne 0 ]]; then
@@ -769,9 +837,16 @@ haveCypherShell () {
     else
       use_this_cypher_shell=$(which cypher-shell)
     fi
-  elif [ ! -x ${use_this_cypher_shell} ]; then
+
+  elif [ ! -x "${use_this_cypher_shell}" ]; then
     messageOutput "*** Error: --cypher-shell ${use_this_cypher_shell} parameter value for full path to cypher-shell not found or is not executable.  Bye."
     exitShell ${RCODE_CYPHER_SHELL_NOT_FOUND}
+  # else 
+  #   test -x "${use_this_cypher_shell}" 
+  #   if [[ $? -ne 0 ]]; then
+  #   messageOutput "*** Error: --cypher-shell ${use_this_cypher_shell} parameter value for full path to cypher-shell not found or is not executable.  Bye."
+  #   exitShell ${RCODE_CYPHER_SHELL_NOT_FOUND}
+  #   fi
   fi
 }
 
@@ -832,7 +907,7 @@ cleanAndRunCypher () {
 
     # eval cypher-shell "${cypher_shell_cmd_line}" < ${cypherFile}  >> ${resultsFile} 2>&1
     # all of THIS just to get to here
-    eval "${use_this_cypher_shell}" "${cypher_shell_cmd_line}" < ${cypherFile}  >> ${resultsFile} 2>&1
+    eval "'${use_this_cypher_shell}'" "${cypher_shell_cmd_line}" < ${cypherFile}  >> ${resultsFile} 2>&1
 
     if [[ $? -ne 0 ]]; then
       cypherRetCode=${RCODE_CYPHER_SHELL_ERROR}
@@ -843,6 +918,7 @@ cleanAndRunCypher () {
 }
 
 verifyCypherShell () {
+
   # connect to cypher-shell and get details
   messageOutput "Connecting to database"
   cypherFile="${TMP_DB_CONN_FILE}${QRY_FILE_POSTFIX}"
@@ -864,7 +940,7 @@ verifyCypherShell () {
       # db.info -> 	"neo4j"	"2020-08-03T16:54:43.627Z"
       # dbms.components -> "Neo4j Kernel"	["4.1.1"]	"community"
       #  v 3
-      # db.components -> 	["3.5.20"]	"community"
+      # db.components -> 	["3.5.20"]	"communiqryFileCnt as user %s" ${db_edition} ${db_version} ${db_username}
       printf -v msg "Using Neo4j %s version %s as user %s" ${db_edition} ${db_version} ${db_username}
 
       if [[ ${db_version} == *$'4.'* ]]; then
@@ -874,7 +950,7 @@ verifyCypherShell () {
 
         msg_arr=($(tail -1 ${resultsFile} | tr ', ' '\n')) # tr for macOS
         db_name=${msg_arr[@]:0:1}
-        msg="${msg} using database ${db_name}"
+        msg="${msg} in database ${db_name}"
 
       fi
       rm -f ${cypherFile} ${resultsFile}
