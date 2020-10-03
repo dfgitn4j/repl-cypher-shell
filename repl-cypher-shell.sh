@@ -771,7 +771,9 @@ intermediateFileHandling () {
  
 # HERE BE DRAGONS
 # if you mess with the shell, make sure that the file variables exist and keep the test in 
-# because the find command with the -exec rm {} and a '*' wildcard can be VERY dangerous. Just say'm
+# because the find command with the -exec rm {} and a '*' wildcard can be VERY dangerous. Just say'n.
+# Note to me: put each file name in array to explicitly delete files and add history functionality
+# to the script
 exitCleanUp() {
 
   if [[ -z ${OUTPUT_FILES_PREFIX} || -z ${SESSION_ID} || -z ${QRY_FILE_POSTFIX} ]]; then
@@ -841,12 +843,6 @@ haveCypherShell () {
   elif [ ! -x "${use_this_cypher_shell}" ]; then
     messageOutput "*** Error: --cypher-shell ${use_this_cypher_shell} parameter value for full path to cypher-shell not found or is not executable.  Bye."
     exitShell ${RCODE_CYPHER_SHELL_NOT_FOUND}
-  # else 
-  #   test -x "${use_this_cypher_shell}" 
-  #   if [[ $? -ne 0 ]]; then
-  #   messageOutput "*** Error: --cypher-shell ${use_this_cypher_shell} parameter value for full path to cypher-shell not found or is not executable.  Bye."
-  #   exitShell ${RCODE_CYPHER_SHELL_NOT_FOUND}
-  #   fi
   fi
 }
 

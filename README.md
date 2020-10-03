@@ -16,7 +16,7 @@
         </td>
     </tr>
     <tr>
-        <th><b>Neo4j Desktop Launched Terminal<\b></th>
+        <th><b>Neo4j Desktop Launched Terminal</b></th>
     </tr>
     <tr>
         <td width="100%">
@@ -62,18 +62,20 @@
  - Use the above functinoalty with an installation of `cypher-shell` detached from the Desktop Neo4j environment or the server. 
    The detached environment is how I use `repl-cypher-shell.sh.sh` day-to-day. .  
    
-## _Is it overkill?_
+## _Is It Overkill? :eyes:_
 
- Maybe. But `repl-cypher-shell.sh` gives me a way my Cypher queries from within tools I use for coding. 
- There's also times where I wanted a REPL and controlled output environment when running `cypher-shell` from the 
- command line.  You can always run `cypher-shell` from a terminal pipe output to a pager, but that is a
- rough REPL enviroment. I prefer the highlight or paste and go method, or running in a command line cycle 
+ Maybe. But `repl-cypher-shell.sh` offers a way to execute Cypher queries from
+ within tools I use for coding in a REPL style workflow. There's also times
+ where I wanted a REPL and controlled output environment when running
+ `cypher-shell` from the  command line.  You can always run `cypher-shell` from
+ a terminal pipe output to a pager, but that is a rough REPL enviroment. I
+ prefer the highlight or paste and go method, or running in a command line cycle
  through this workflow:
 
   vi or emacs to edit cypher query :point_right: save query and exit vi :point_right: run query in cypher-shell :point_right: view output in pager :point_right: return to vi  :metal:
 
  That's all good, but the main value of `repl-cypher-shell.sh` comes from using within editors such as _Sublime Text 3_, 
- _VSCode_, and _Atom_, etc. to send cypher queries to an embedded terminal window to be run repeated.y.
+ _VSCode_, _Atom_, etc. to send cypher queries to an embedded terminal window to be run repeatedly.
  
 ## _Installation_
 
@@ -179,16 +181,24 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
          `repl-cypher-shell.sh --cypher-shell ./bin/cypher-shell`
 
 
-        :heavy_exclamation_mark: It's bad practice to work in the initial directory that the Neo4j Desktop launced terminal shell 
-        starts in. Mistakes happen, and _*all*_ files you created will be gone when you delete the 
-        database through Neo4j Desktop.  Suggestion is to capture the Neo4j Desktop install directory and the `cd` to 
-        another, non-Neo4j Desktop managed directory.  For example, on launching a Neo4j Desktop terminal:
+        :heavy_exclamation_mark: It's bad practice to work in the initial
+         directory that the Neo4j Desktop launched terminal shell  starts in. Mistakes
+         happen, of which the most easy to fall into is that _*all*_ files you created in
+         the Neo4j Desktop database install directory will be gone when you delete the
+         database through Neo4j Desktop.  Suggestion is to capture the Neo4j Desktop
+         install directory and the `cd` to  another, non-Neo4j Desktop managed directory.
+         For example, on launching a Neo4j Desktop terminal:
 
         ```console
         n4jdir="$(pwd)/bin/cypher-shell"
         cd ~/MyWorkingDirectory
         repl-cypher-shell.sh --cypher-shell $n4jdir --vi
         ```
+
+### Getting Help
+
+  Run repl-cypher-shell.sh --help, or look in the source code for more information on
+  the command line options and how to use them. 
 
 ## _Command Line Options_
 
@@ -224,11 +234,14 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
 
     [*] ANY other parameters are passed through as is to cypher-shell.
 
-### BUGS:
+### Issues:
  
   - There has to be.  
     
-### Hints and distractions
+### Hints & Distractions
  
- - Unfortunately this is a shell script that has been tested mainly on Mac OSX, and ubuntu.  Seemed to work OK in a Windows Subsystem for Linux.
+ - Unfortunately this is a shell script that has been tested mainly on Mac OSX, and ubuntu.  
+   Seemed to work OK in a Windows Subsystem for Linux. This really should've been written in 
+   Python for portability, but hey, most of the shell code was already written... so someday,
+   maybe. 
 

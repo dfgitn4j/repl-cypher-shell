@@ -1,4 +1,4 @@
-#set -xv
+# set -xv
 # test parameters in script.  Simpler than using expect
 #
 # Run with one parameter will return the variables used as exit codes in the 
@@ -37,7 +37,6 @@ EOV
   eval "$(grep --color=never QRY_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
   eval "$(grep --color=never RESULTS_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
   eval "$(grep --color=never TIME_OUTPUT_HEADER= ${TEST_SHELL} | head -1)"
-  
 
    # file patterns for file existence test
   saveAllFilePattern="${OUTPUT_FILES_PREFIX}.*(${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})"
@@ -48,9 +47,7 @@ EOV
   errorMsg="FAIL"
 
    # RESULTS_OUTPUT_FILE="resultsTestRun-$(date '+%Y-%m-%d_%H:%M:%S')".txt
-   # output file header
-  printf "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tDescription\n" > ${RESULTS_OUTPUT_FILE}
-
+ 
   tmpTestFile=aFile_${RANDOM}.cypher
   qryOutputFile="qryResults_${RANDOM}.txt"
 
@@ -62,6 +59,7 @@ EOV
   testParamQry='WITH $strParam AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;'
   testParamParams="--param 'x => 2' --param 'strParam => \"goodParam\"'"
   testParamGrep="grep -c --color=never goodParam"
+  testTimeParamGrep="grep -c --color=never '${TIME_OUTPUT_HEADER}'"
 
   runCnt=0
   successCnt=0
@@ -85,7 +83,7 @@ interruptShell () {
 
 exitOnError () {
   if [[ ${exitOnError} == "Y" ]]; then
-    printf "Encountered a testing error and stopOnError = '${exitOnError}'.  Bye."
+    printf "%s\n\n" "Encountered a testing error and stopOnError = '${exitOnError}'.  Bye."
     rm ${qryOutputFile} 
     exit
   fi 
@@ -94,6 +92,27 @@ exitOnError () {
 existingFileCnt () {
   # 1st param is the file pattern to test
   _fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${1}" | wc -l ) 
+}
+
+# ckForLeftoverOutputFiles () {
+#   existingFileCnt "${qryOutputFile}" # should be no files. error if there is
+#   if [[ ${_fileCnt} -ne 0 ]]; then
+#     printf "%s\n\n" "Please clean up previous output files. Tests can fail when they shouldn't if left in place."
+#     find * -type f -depth 0 | grep --color=never -E "${saveAllFilePattern}"
+#     printf "%s\n\n" "Bye."
+#     exit
+#   fi
+# }
+# output for screen and results file
+printOutput () {
+
+  printf "%s  Exit Code: %d  Exp Code: %d Input: %-6sErr Msg: %s\tDesc: %s\n" \
+         ${msg} ${exitCode} ${expectedExitCode} ${testType} "${secondErrorMsg}" "${desc}"
+  printf "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+         ${msg} ${exitCode} ${expectedExitCode} ${testType} \
+         ${errVarNames[@]:${exitCode}:1} ${errVarNames[@]:${expectedExitCode}:1}  \
+         ${usePipe} "'${callingParams}'" "'${secondErrorMsg}'" "'${desc}'" >> ${RESULTS_OUTPUT_FILE}
+
 }
 
 # runShell ()
@@ -116,7 +135,6 @@ existingFileCnt () {
 #  4b.   If grep-ing for content in ${qryOutputFile} and no error triggered by 4a, then run grep cmd 
 #         ${grepFileContentCmd} to validate content in ${qryOutputFile}
 #  4c.   If no error, ${updateSuccessCnt} == Y, increment ${successCnt}, else increment ${errorCnt}
-
 runShell () {
   if [[ $# -lt 7 ]] ; then
     printf "Exiting. Invalid # params to ${0}. Sent:\n(${@})\n Need at least 7, got: $#. Bye.\n"
@@ -132,8 +150,10 @@ runShell () {
   expectedNbrFiles=${6}
   grepFileContentCmd="${7}"
   desc="${8:-not provided}"
+  secondErrorMsg="" # error not triggered by an invalid return code
+  updateSuccessCnt="Y" # assume we're going to have successfull tests
 
-  printf "%02d. " $(( ++runCnt ))
+  printf "%02d. " $(( ++runCnt ))  # screen output count
 
   if [[ ${testType} == "STDIN" ]]; then
     eval ${TEST_SHELL} -1 ${callingParams} >${qryOutputFile} 2>/dev/null <<EOF
@@ -154,13 +174,14 @@ EOF
   fi 
 
    # test results
-  updateSuccessCnt="Y" # assume we're going to have successfull tests
-  if [[ ${exitCode} -ne ${expectedExitCode} ]]; then
+   if [[ ${exitCode} -ne ${expectedExitCode} ]]; then
     updateSuccessCnt="N"
+    printf -v secondErrorMsg "%s" "Expected exit code = ${expectedExitCode}, got ${exitCode}"
   elif [[ -z ${outputFilePattern} && -z ${grepFileContentCmd} ]]; then # no output files expected.
     existingFileCnt "${saveAllFilePattern}" # should be no files. error if there is
     if [[ ${_fileCnt} -ne 0 ]]; then
       updateSuccessCnt="N"
+      secondErrorMsg="Output files from shell exist that should not be there."
     fi
   else # file existence and file content existence tests
     if [[ ! -z ${outputFilePattern} ]]; then # file existence checks and count tests
@@ -173,32 +194,29 @@ EOF
         done 
       else # error, did not find the number of expected files
         updateSuccessCnt="N"
+        printf -v secondErrorMsg "%s" "Expected ${_fileCnt} output files, got ${expectedNbrFiles}"
       fi
     fi # validate existence and number of files
 
     if [[ ! -z ${grepFileContentCmd} && ${updateSuccessCnt} == "Y" ]]; then # have file, validate text in output. 
       if [[ $(eval "${grepFileContentCmd} ${qryOutputFile}") -eq 0 ]]; then # output of grep cmd should be > 0
         updateSuccessCnt="N"
+        printf -v secondErrorMsg "%s" "grep command '${grepFileContentCmd}' on output file: ${qryOutputFile} failed."
       fi
     fi
   fi
 
-    # set status message and update counts
+   # set status message and update counts
   if [[ ${updateSuccessCnt} == "Y" ]]; then
     msg="${successMsg}"
     (( ++successCnt ))
+    printOutput
   else
     msg="${errorMsg}"
     (( ++errorCnt ))
+    printOutput
     exitOnError 
   fi
-
-  printf "%s  Exit Code: %d  Exp Code: %d  Input: %s\tDesc: %s\n" \
-         ${msg} ${exitCode} ${expectedExitCode} ${testType} "${desc}"
-  printf "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\n" \
-         ${msg} ${exitCode} ${expectedExitCode} ${testType} \
-         ${errVarNames[@]:${exitCode}:1} ${errVarNames[@]:${expectedExitCode}:1}  \
-         ${usePipe} "'${callingParams}'" "'${desc}'" >> ${RESULTS_OUTPUT_FILE}
 }
 
 
@@ -214,6 +232,10 @@ testsToRun () {
   #  RCODE_NO_PASSWORD=6
   #  RCODE_EMPTY_INPUT=7
   #  RCODE_MISSING_INPUT_FILE=8
+
+
+    # output file header
+  printf "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tError Message\tDescription\n" > ${RESULTS_OUTPUT_FILE}
 
   # set Neo4j uid / pw to a value if env vars not set
   uid="${NEO4J_USERNAME:-neo4j}"
@@ -347,7 +369,7 @@ testsToRun () {
   # QUERY INPUT TESTING 
   printf "\n*** Starting query method and param and output tests ***\n" 
 
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--time" "" 0 "${TIME_OUTPUT_HEADER}" \
+  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--time" "" 0 "${testTimeParamGrep}" \
            "param test - test --time parameter output."
 
   runShell ${RCODE_SUCCESS} "STDIN" "${testParamQry}" "${testParamParams}" "" 0 "${testParamGrep}" \
@@ -419,6 +441,8 @@ if [[ $# -gt 0 ]]; then # any param prints shell variables
   printf "\n==========\n"
   exit 0
 fi  
+
+# ckForLeftoverOutputFiles 
 
 testsToRun
 exitShell 0
