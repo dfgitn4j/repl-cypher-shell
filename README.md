@@ -30,19 +30,22 @@
 
 ## _Why?_
  
-## Two Reasons:
+#### Two Reasons:
 
- 1. I find it more efficient to write complex Cypher queries in an editor and wanted a mechanism to 
-    just highlight my query and run it and page through the text output. 
+  1. I find it more efficient to write complex Cypher queries in an editor and wanted a mechanism to 
+     just highlight my query and run it and page through the text output. 
 
- 2. Often the query I write is fast, but it returns too much data for the Neo4j Browser to render in a 
-    reasonable amount of time. The Neo4j Browser is an [electronjs](https://www.electronjs.org/) based web 
-    browser app after all, and there's only so much a web browser can do. There's always Neo4j Bloom to 
-    visualize large sets of data, but it's functionality is not targeted at the development workflow scenario 
-    I am looking for. 
+  2. cypher-shell is one of the best ways to test query performance without messing with drivers and your
+     own code. 
 
- 3. Most of the code for `repl-cypher-shell.sh` was already built for another database command line tool a 
-    long, long, long... time... ago. I think you can tell from the style.  Should redo in python.  OK. three reasons.
+  3. Often the query I write is fast, but it returns too much data for the Neo4j Browser to render in a 
+     reasonable amount of time. The Neo4j Browser is an [electronjs](https://www.electronjs.org/) based web 
+     and there's only so much a web browser can do. There's always Neo4j Bloom to 
+     visualize large sets of data, but it's functionality is not targeted at the development workflow scenario 
+     I am looking for. 
+
+   ... And C   
+     &nbsp;&nbsp;&nbsp;... Most of the code for `repl-cypher-shell.sh` was already built for another database command line tool a in a project long ago and far away. I think you can tell from the style. Should redo in python. OK.  Four   reasons.
 
 
 #### `repl-cypher-shell.sh` allows you to:
@@ -65,7 +68,7 @@
 ## _Is It Overkill? :eyes:_
 
  Maybe. But `repl-cypher-shell.sh` offers a way to execute Cypher queries from
- within tools I use for coding in a REPL style workflow. There's also times
+ within windows tools I use for coding in a REPL style workflow. There's also times
  where I wanted a REPL and controlled output environment when running
  `cypher-shell` from the  command line.  You can always run `cypher-shell` from
  a terminal pipe output to a pager, but that is a rough REPL enviroment. I
@@ -74,8 +77,7 @@
 
   vi or emacs to edit cypher query :point_right: save query and exit vi :point_right: run query in cypher-shell :point_right: view output in pager :point_right: return to vi  :metal:
 
- That's all good, but the main value of `repl-cypher-shell.sh` comes from using within editors such as _Sublime Text 3_, 
- _VSCode_, _Atom_, etc. to send cypher queries to an embedded terminal window to be run repeatedly.
+ That's all good, but to me, the main value of `repl-cypher-shell.sh` comes from using within editors such as _Sublime Text_, _VSCode_, _Atom_, etc. to send cypher queries to an embedded terminal window to be run repeatedly.
  
 ## _Installation_
 
@@ -145,7 +147,7 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
        copy-paste-into-terminal key sequence, or just copy and paste into the terminal.
 
      - Hit Enter key in the terminal window to start the shell if needed. A user name and password will
-       be asked for if it's needed.
+       be asked for if required.
 
   2. Run Cypher
 
@@ -195,14 +197,17 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
         repl-cypher-shell.sh --cypher-shell $n4jdir --vi
         ```
 
-### Getting Help
+      _NOTE:_ Arguments not recognized by repl-cypher-shell.sh are passed through to cypher-shell.
+      This can lead to strange errors for unknown arguments out of cypher-shell.
 
+### Getting Help
+  
   Run repl-cypher-shell.sh --help, or look in the source code for more information on
   the command line options and how to use them. 
 
 ## _Command Line Options_
 
-  repl-cypher-shell.sh
+    repl-cypher-shell.sh
 
     [-u | --username]        cypher-shell username parameter.
     [-p | --password]        cypher-shell password parameter.
@@ -241,7 +246,7 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
 ### Hints & Distractions
  
  - Unfortunately this is a shell script that has been tested mainly on Mac OSX, and ubuntu.  
-   Seemed to work OK in a Windows Subsystem for Linux. This really should've been written in 
-   Python for portability, but hey, most of the shell code was already written... so someday,
-   maybe. 
+   Seemed to work OK in a Windows Subsystem for Linux, but I haven't tested it recently. 
+   This really should've been written in Python for portability, but hey, most of the shell 
+   code was already written... so someday, maybe. 
 
