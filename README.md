@@ -245,6 +245,8 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
     
 ### Hints & Distractions
  
+ - There is _*Cypher syntax highlighting*_ for `Sublime Text` found in this [github](https://github.com/cskardon/sublime-cypher) provided by @cskardon.  The repo also provides another way to run Cypher from inside Sublime.
+ 
  - Unfortunately this is a shell script that has been tested mainly on Mac OSX, and ubuntu.  
    Seemed to work OK in a Windows Subsystem for Linux, but I haven't tested it recently. 
    This really should've been written in Python for portability, but hey, most of the shell 
