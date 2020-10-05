@@ -44,8 +44,8 @@
      visualize large sets of data, but it's functionality is not targeted at the development workflow scenario 
      I am looking for. 
 
-   ... And C   
-     &nbsp;&nbsp;&nbsp;... Most of the code for `repl-cypher-shell.sh` was already built for another database command line tool a in a project long ago and far away. I think you can tell from the style. Should redo in python. OK.  Four   reasons.
+   ... And C.<p></p>
+     &nbsp;&nbsp;&nbsp;... Most of the code for `repl-cypher-shell.sh` was already built for another database command line tool for a project long ago and far away. I think you can tell from the style. The last sentence is my way of apologizing for this being a shell script that should've been done in Python. OK.  Four reasons.
 
 
 #### `repl-cypher-shell.sh` allows you to:
