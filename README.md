@@ -1,7 +1,7 @@
 # Simple Frontend Shell  To Improve The Usability of Neo4j's `cypher-shell` command line tool
 
 > - Run Cypher queries easily from within an editor, such as _Sublime Text 3_, _Atom_, _VSCode_, _IntelliJ_, or any other editor that supports embedded terminals.
-> - As a command line REPL interface to cypher-shell, including in a terminal window started from Neo4j Desktop
+> - As a command line REPL interface to cypher-shell, including in a terminal window started from `Neo4j Desktop`
 
 -----
 <table>
@@ -81,11 +81,11 @@
  
 ## _Installation_
 
-#### Install Neo4j `cypher-shell` , or use the `cypher-shell` that comes with the Neo4j Desktop
+#### Install Neo4j `cypher-shell` , or use the `cypher-shell` that comes with the `Neo4j Desktop`
 
 A `cypher-shell` installation is a pre-requisite to running `repl-cypher-shell.sh` front-end. Multiple versions
 of `cypher-shell` can be downloaded and installed, or you can use the cypher-shell that is in the database 
-environment created when you create a Neo4j database using the Neo4j Desktop.
+environment created when you create a Neo4j database using the `Neo4j Desktop`.
 
 
 1. Install stand alone `cypher-shell` and add to your PATH environment variable (the most common approach)  
@@ -96,7 +96,7 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
    Neo4j 3.x product line uses java 8 and 4.x uses java 11 . Add the `cypher-shell` executable path to your PATH 
    environment variable.
 
-2. Use the Neo4j Desktop version of cypher-shell already installed with the database created and managed by the Neo4j Desktop.
+2. Use the `Neo4j Desktop` version of cypher-shell already installed with the database created and managed by the `Neo4j Desktop`.
 
    This approach is useful when you don't have a standalone version of the `cypher-shell` installed, or
    have version compatibility issues. There is the `repl-cypher-shell.sh` `--cypher-shell` command line 
@@ -109,7 +109,7 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
 2. Make file executable (e.g. `chmod 744 repl-cypher-shell.sh`).
 
 3. Place in directory that is in the PATH variable. For example /usr/local/bin
-   seems to be good for mac's because it's in the PATH of the Neo4j Desktop
+   seems to be good for mac's because it's in the PATH of the `Neo4j Desktop`
    termininal environment.
 
 ### Enable embedded terminal functionality if using a gui code editor
@@ -177,19 +177,19 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
 
      1. Use the `-C | --cypher-shell` command line option to specify the `cypher-shell` install. 
         This is useful when you do not have a standalone `cypher-shell` installed. To do this, open
-        a Neo4j Desktop terminal window for the currently running database and run this command from 
+        a `Neo4j Desktop` terminal window for the currently running database and run this command from 
         the command line prompt:
 
          `repl-cypher-shell.sh --cypher-shell ./bin/cypher-shell`
 
 
         :heavy_exclamation_mark: It's bad practice to work in the initial
-         directory that the Neo4j Desktop launched terminal shell  starts in. Mistakes
+         directory that the `Neo4j Desktop` launched terminal shell  starts in. Mistakes
          happen, of which the most easy to fall into is that _*all*_ files you created in
-         the Neo4j Desktop database install directory will be gone when you delete the
-         database through Neo4j Desktop.  Suggestion is to capture the Neo4j Desktop
-         install directory and the `cd` to  another, non-Neo4j Desktop managed directory.
-         For example, on launching a Neo4j Desktop terminal:
+         the `Neo4j Desktop` database install directory will be gone when you delete the
+         database through `Neo4j Desktop`.  Suggestion is to capture the `Neo4j Desktop`
+         install directory and the `cd` to  another, non-`Neo4j Desktop` managed directory.
+         For example, on launching a `Neo4j Desktop` terminal:
 
         ```console
         n4jdir="$(pwd)/bin/cypher-shell"
@@ -245,8 +245,8 @@ environment created when you create a Neo4j database using the Neo4j Desktop.
     
 ### Hints & Distractions
  
- - There is _*Cypher syntax highlighting*_ for `Sublime Text` found in this [github](https://github.com/cskardon/sublime-cypher) provided by @cskardon.  The repo also provides another way to run Cypher from inside Sublime.
- 
+ - There is _*Cypher syntax highlighting*_ for `Sublime Text` found in this [github](https://github.com/cskardon/sublime-cypher) provided by Chris Skardon. This project's main functionality is to provide another way to run Cypher from inside `Sublime Text`.
+
  - Unfortunately this is a shell script that has been tested mainly on Mac OSX, and ubuntu.  
    Seemed to work OK in a Windows Subsystem for Linux, but I haven't tested it recently. 
    This really should've been written in Python for portability, but hey, most of the shell 
