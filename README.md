@@ -220,7 +220,7 @@ environment created when you create a Neo4j database using the `Neo4j Desktop`.
     [-S | --saveCypher]      save each query statement in a file.
     [-R | --saveResults]     save each query output in a file.
     [-V | --vi]              use vi editor.
-    [-E | --editor] [cmd]    use external editor. See NOTES.
+    [-E | --editor] [cmd]    use external editor. Run --help for how to use.
     [-L | --lessOpts] [opts] use these less pager options instead of defaults.
 
     [-t | --time]            print time elapsed between sending query and
