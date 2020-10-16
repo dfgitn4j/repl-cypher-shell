@@ -198,7 +198,7 @@ environment created when you create a Neo4j database using the `Neo4j Desktop`.
         ```
 
       _NOTE:_ Arguments not recognized by repl-cypher-shell.sh are passed through to cypher-shell.
-      This can lead to strange errors for unknown arguments out of cypher-shell.
+      This can lead to strange errors produced by cypher-shell for unknown arguments.
 
 ### Getting Help
   
@@ -223,8 +223,7 @@ environment created when you create a Neo4j database using the `Neo4j Desktop`.
     [-E | --editor] [cmd]    use external editor. Run --help for how to use.
     [-L | --lessOpts] [opts] use these less pager options instead of defaults.
 
-    [-t | --time]            print time elapsed between sending query and
-                             creating the results file.
+    [-t | --time]            output query start time.
     [-c | --showCmdLn]       show script command line args in output.
     [-q | --quiet]           minimal output.
 
@@ -249,6 +248,6 @@ environment created when you create a Neo4j database using the `Neo4j Desktop`.
 
  - Unfortunately this is a shell script that has been tested mainly on Mac OSX, and ubuntu.  
    Seemed to work OK in a Windows Subsystem for Linux, but I haven't tested it recently. 
-   This really should've been written in Python for portability, but hey, most of the shell 
+   This really should've been written in go or python for portability, but hey, most of the shell 
    code was already written... so someday, maybe. 
 
