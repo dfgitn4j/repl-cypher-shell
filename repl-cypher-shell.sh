@@ -393,10 +393,6 @@ setDefaults () {
   #fi
 }
 
-printTimeFromSeconds() {
-  printf "%02d:%02d:%02d" $(($1/3600)) $(($1/60%60)) $(($1%60))
-}
-
 # either or, works for one char answers, e.g. [Yy]
 yesOrNo() {
   if [[ ${is_pipe} == "N" ]]; then
@@ -436,15 +432,6 @@ runCypherShellInfoCmd () {
   messageOutput "Found cypher-shell command argument '${_currentParam}'. Running and exiting. Bye."
   cypher-shell "${1}"
   exitShell ${?}
-}
-
-# find a string in a string, return exit code from grep
-findStr() {
-  lookFor="${1}"
-  shift
-  for arg in "$@"; do inThis="${inThis} ${arg}"; done
-  echo "${inThis}" | grep --extended-regexp --quiet -e "${lookFor}"
-  return $?
 }
 
  # getOptArgs - gets 0 or more flag options, sets a var with the vals in _retOpts for a flag until next
@@ -750,9 +737,9 @@ intermediateFileHandling () {
   
     # set new file names
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
-  printf -v cypherFile "%s%03d.%s_%s%s" ${OUTPUT_FILES_PREFIX} ${file_nbr} ${date_stamp} ${SESSION_ID} ${QRY_FILE_POSTFIX}
+  printf -v cypherFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${QRY_FILE_POSTFIX}
    # $resultsFile is only used if output file is to be saved
-  printf -v resultsFile "%s%03d.%s_%s%s" ${OUTPUT_FILES_PREFIX} ${file_nbr} ${date_stamp} ${SESSION_ID} ${RESULTS_FILE_POSTFIX}
+  printf -v resultsFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${RESULTS_FILE_POSTFIX}
 
   if [[ ${edit_cnt} -eq 0 && ! -z ${input_cypher_file} ]]; then # have input cypher file
     cp ${input_cypher_file_name} ${cypherFile}
@@ -771,7 +758,7 @@ exitCleanUp() {
     messageOutput " "
     if [[ $(( success_run_cnt )) -ne 0 ]]; then
       if [[ ${save_all} == "Y" ]]; then
-        messageOutput "**** Don't forget about the saved $(( success_run_cnt*2 )) (${QRY_FILE_POSTFIX}) query and ${outputFileCnt} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+        messageOutput "**** Don't forget about the saved $(( success_run_cnt*2 )) (${QRY_FILE_POSTFIX}) query results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
       elif [[ ${save_results} == "Y" ]]; then
         messageOutput "**** Don't forget about the saved ${success_run_cnt} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
       elif [[ ${save_query} == "Y" ]]; then
