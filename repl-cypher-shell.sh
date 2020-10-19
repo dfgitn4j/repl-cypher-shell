@@ -418,7 +418,7 @@ printContinueOrExit() {
     exitShell ${cypherRetCode}
   fi
   if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
-    printf "%s %s\n" "${msg} Press Enter to continue. Ctl-C to exit ${shellName} "
+    printf "%s\n" "${msg}Press Enter to continue. Ctl-C to exit ${shellName} "
     read n
   fi
 }
@@ -737,7 +737,6 @@ intermediateFileHandling () {
   # flags on what to do with files and userEditor to keep
   # current query file around for editing (overwrite new cypherFile)
 
-
   if [[ ${save_all} == "Y" || ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then 
     if [[ ${editor_cnt} -eq 1 && ${edit_cnt} -ne 0 ]]; then
       cp ${cypherFile} ${TMP_FILE}
@@ -928,7 +927,7 @@ verifyCypherShell () {
       clear
       messageOutput "${msg}"
       if [[ ${editor_cnt} -eq 1 ]]; then
-        printContinueOrExit "Using ${editor_to_use}."
+        printContinueOrExit "Using ${editor_to_use}. "
       fi
 
     fi
@@ -945,6 +944,7 @@ verifyCypherShell () {
 
 
 # input cypher text, either from pipe, editor, or stdin (usually terminal window in editor)
+
 getCypherText () {
   # { cat <&3 3<&- & } 3<&0 > ${cypherFile}
   if [[ ${editor_cnt} -eq 0 ]]; then
@@ -961,15 +961,15 @@ getCypherText () {
       if [[ ${editor_to_use} != "vi" ]]; then
         eval ${editor_to_use} ${cypherFile}
       else # using vi
-        if [[ ${edit_cnt} -eq 0 ]]; then
+        if [[ ${edit_cnt} -eq 0 &&  -z "${input_cypher_file}" ]]; then
           eval "${editor_to_use} ${vi_initial_open_opts} ${cypherFile}" # open file option +star (new file)
         else
           eval "${editor_to_use} ${cypherFile}"
         fi
       fi
       # ask user if they want to run file or go back to edit
-      clear
       yesOrNo "Run query (y) or continue to edit (n)? Ctl-C to exit ${shellName}? "
+      clear
       if [[ $? -eq 1 ]]; then # answered 'n', continue
         continue  # go back to edit on same file
       else # answered yes to running query
@@ -996,7 +996,7 @@ executionLoop () {
     cleanAndRunCypher "${user_name} ${user_password} ${use_params} ${cypherShellArgs} ${cypher_format_arg}"
 
     if [[ ${cypherRetCode} -eq 0 ]]; then
-      messageOutput "Finished query execution and output file creation: $(date)"
+      # messageOutput "Finished query execution: $(date)"
       (( success_run_cnt++ ))
       if [[ ${editor_cnt} -eq 1 ]]; then # don't go straight back into editor
         printContinueOrExit
