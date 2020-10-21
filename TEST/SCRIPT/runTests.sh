@@ -1,4 +1,4 @@
-# set -xv
+#set -xv
 # test parameters in script.  Simpler than using expect
 #
 # Run with one parameter will return the variables used as exit codes in the 
@@ -17,7 +17,7 @@
 TEST_SHELL='../../repl-cypher-shell.sh'
 CYPHER_SHELL="$(which cypher-shell)" # change  if want to use a different cypher-shell
 PATH=${CYPHER_SHELL}:${PATH} # put testing cypher-shell first in PATH
-RESULTS_OUTPUT_FILE=resultsTestRun.txt
+
 
 initVars () {
   vars=$(cat <<EOV
@@ -32,7 +32,15 @@ EOV
   # create ret code variables names with value
   eval $vars 
   
-   # get output file patterns, assumes variable definition in script is the first pattern that matches
+  successMsg="PASS"
+  errorMsg="FAIL"
+
+   # RESULTS_OUTPUT_FILE="resultsTestRun-$(date '+%Y-%m-%d_%H:%M:%S')".txt
+ 
+  # some failure tests work on matching the saveAllFilePattern. Temp files 
+  # cannot use those postfix's
+  #
+  # get output file patterns, assumes variable definition in script is the first pattern that matches
   eval "$(grep --color=never OUTPUT_FILES_PREFIX= ${TEST_SHELL} | head -1)" 
   eval "$(grep --color=never QRY_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
   eval "$(grep --color=never RESULTS_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
@@ -42,14 +50,9 @@ EOV
   saveAllFilePattern="${OUTPUT_FILES_PREFIX}.*(${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})"
   saveQryFilePattern="${OUTPUT_FILES_PREFIX}.*${QRY_FILE_POSTFIX}"
   saveResultsFilePattern="${OUTPUT_FILES_PREFIX}.*${RESULTS_FILE_POSTFIX}"
-
-  successMsg="PASS"
-  errorMsg="FAIL"
-
-   # RESULTS_OUTPUT_FILE="resultsTestRun-$(date '+%Y-%m-%d_%H:%M:%S')".txt
- 
-  tmpTestFile=aFile_${RANDOM}.cypher
-  qryOutputFile="qryResults_${RANDOM}.txt"
+  TMP_TEST_FILE=aFile_${RANDOM}.cypher
+  QRY_OUTPUT_FILE="qryResults_${RANDOM}.results"
+  RESULTS_OUTPUT_FILE="resultsTestRun$.out"
 
   testSuccessQry="WITH 1 AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;"
   testSuccessGrep="grep -c --color=never CYPHER_SUCCESS"
@@ -68,7 +71,7 @@ EOV
 }
 
 exitShell () {
-  rm -f ${qryOutputFile}
+  rm -f ${QRY_OUTPUT_FILE}
   exit ${1}
 }
 
@@ -76,7 +79,7 @@ interruptShell () {
   printf "\nCtl-C pressed. Bye.\n\n"
   exec <&- # close stdin
   printf "Last ${TEST_SHELL} output message:\n\n"
-  cat ${qryOutputFile}
+  cat ${QRY_OUTPUT_FILE}
   exitShell 1
 }
 
@@ -84,7 +87,7 @@ interruptShell () {
 exitOnError () {
   if [[ ${exitOnError} == "Y" ]]; then
     printf "%s\n\n" "Encountered a testing error and stopOnError = '${exitOnError}'.  Bye."
-    rm ${qryOutputFile} 
+    rm ${QRY_OUTPUT_FILE} 
     exit
   fi 
 }
@@ -95,7 +98,7 @@ existingFileCnt () {
 }
 
 # ckForLeftoverOutputFiles () {
-#   existingFileCnt "${qryOutputFile}" # should be no files. error if there is
+#   existingFileCnt "${QRY_OUTPUT_FILE}" # should be no files. error if there is
 #   if [[ ${_fileCnt} -ne 0 ]]; then
 #     printf "%s\n\n" "Please clean up previous output files. Tests can fail when they shouldn't if left in place."
 #     find * -type f -depth 0 | grep --color=never -E "${saveAllFilePattern}"
@@ -121,7 +124,7 @@ printOutput () {
 # Behavior control parameters:
 #
 # outputFilePattern  - the grep pattern used to validate a file exists. Easiest and most portable
-# grepFileContentCmd - full grep command to validate a string exists in the ${qryOutputFile}
+# grepFileContentCmd - full grep command to validate a string exists in the ${QRY_OUTPUT_FILE}
 # expectedNbrFiles   - valid values are 0 and 1
 #
 # Test ordering:
@@ -132,8 +135,8 @@ printOutput () {
 # 4.  Else have file existence and file content existence tests
 #  4a.   If outputFilePattern then validate file with ${outputFilePattern} exists and ${expectedNbrFiles} 
 #         of them exist.  Valid ${expectedNbrFiles} is 0 and 1
-#  4b.   If grep-ing for content in ${qryOutputFile} and no error triggered by 4a, then run grep cmd 
-#         ${grepFileContentCmd} to validate content in ${qryOutputFile}
+#  4b.   If grep-ing for content in ${QRY_OUTPUT_FILE} and no error triggered by 4a, then run grep cmd 
+#         ${grepFileContentCmd} to validate content in ${QRY_OUTPUT_FILE}
 #  4c.   If no error, ${updateSuccessCnt} == Y, increment ${successCnt}, else increment ${errorCnt}
 runShell () {
   if [[ $# -lt 7 ]] ; then
@@ -156,15 +159,15 @@ runShell () {
   printf "%02d. " $(( ++runCnt ))  # screen output count
 
   if [[ ${testType} == "STDIN" ]]; then
-    eval ${TEST_SHELL} -1 ${callingParams} >${qryOutputFile} 2>/dev/null <<EOF
+    eval ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 2>/dev/null <<EOF
     ${testQry}
 EOF
   exitCode=$?
   elif [[ ${testType} == "PIPE" ]]; then
-    echo ${testQry} | eval ${TEST_SHELL} ${callingParams} >${qryOutputFile} 
+    echo ${testQry} | eval ${TEST_SHELL} ${callingParams} >${QRY_OUTPUT_FILE} 
     exitCode=$?
   elif [[ ${testType} == "FILE" ]]; then # expecting -f <filename> parameter
-    ${TEST_SHELL} -1 ${callingParams} >${qryOutputFile} 
+    ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 
     exitCode=$?
   else
     # printf "Exiting. Invalid testType specification: '${testType}' Valid entries are STDIN, PIPE, FILE.\n"
@@ -199,9 +202,9 @@ EOF
     fi # validate existence and number of files
 
     if [[ ! -z ${grepFileContentCmd} && ${updateSuccessCnt} == "Y" ]]; then # have file, validate text in output. 
-      if [[ $(eval "${grepFileContentCmd} ${qryOutputFile}") -eq 0 ]]; then # output of grep cmd should be > 0
+      if [[ $(eval "${grepFileContentCmd} ${QRY_OUTPUT_FILE}") -eq 0 ]]; then # output of grep cmd should be > 0
         updateSuccessCnt="N"
-        printf -v secondErrorMsg "%s" "grep command '${grepFileContentCmd}' on output file: ${qryOutputFile} failed."
+        printf -v secondErrorMsg "%s" "grep command '${grepFileContentCmd}' on output file: ${QRY_OUTPUT_FILE} failed."
       fi
     fi
   fi
@@ -222,17 +225,6 @@ EOF
 
 # someday write expect scripts for interactive input
 testsToRun () {
-
-  #  RCODE_SUCCESS=0
-  #  RCODE_INVALID_CMD_LINE_OPTS=1
-  #  RCODE_CYPHER_SHELL_NOT_FOUND=2
-  #  RCODE_CYPHER_SHELL_ERROR=3
-  #  RCODE_INVALID_FORMAT_STR=4
-  #  RCODE_NO_USER_NAME=5
-  #  RCODE_NO_PASSWORD=6
-  #  RCODE_EMPTY_INPUT=7
-  #  RCODE_MISSING_INPUT_FILE=8
-
 
     # output file header
   printf "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tError Message\tDescription\n" > ${RESULTS_OUTPUT_FILE}
@@ -273,16 +265,13 @@ testsToRun () {
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "STDIN" "" "--vi --editor 'atom'" "" 0 "" \
            "invalid param test - conflicting editor args."
 
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "STDIN" "" "-t -c --quiet" "" 0 "" \
-           "invalid param test - cypher-shell conflicting extra info and quiet args."
-
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--vi" "" 0 "" \
            "invalid param test - incompatible editor argument and pipe input"
 
-  touch ${tmpTestFile}
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--file ${tmpTestFile}" "" 0 "" \
+  touch ${TMP_TEST_FILE}
+  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--file ${TMP_TEST_FILE}" "" 0 "" \
            "invalid param test - incompatible file input and pipe input."
-  rm ${tmpTestFile}
+  rm ${TMP_TEST_FILE}
 
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--exitOnError nogood" "" 0 "" \
            "invalid param test - flag argument only, no option expected."
@@ -298,9 +287,6 @@ testsToRun () {
 
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--vi --editor 'atom'" "" 0 "" \
            "invalid param test - conflicting editor args."
-
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "-t -c --quiet" "" 0 "" \
-           "invalid param test - cypher-shell conflicting extra info and quiet args."
   
   runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "" "--invalid param" "" 0 "" \
            "invalid param test - invalid parameter argument value."
@@ -384,18 +370,24 @@ testsToRun () {
   runShell ${RCODE_EMPTY_INPUT} "PIPE" "" "" "" 0 "" \
            "query tests - empty cypher query"
 
-  echo "${testSuccessQry}" > ${tmpTestFile}
-  runShell ${RCODE_SUCCESS} "FILE" "" "--file ${tmpTestFile}" "" 0 "${testSuccessGrep}" \
+  runShell ${RCODE_EMPTY_INPUT} "STDIN" "" "-t -c --quiet" "" 0 "" \
+           "query tests - empty cypher query with --quiet"
+
+  runShell ${RCODE_EMPTY_INPUT} "PIPE" "" "-t -c --quiet" "" 0 "" \
+           "query tests - empty cypher query with --quiet"
+
+  echo "${testSuccessQry}" > ${TMP_TEST_FILE}
+  runShell ${RCODE_SUCCESS} "FILE" "" "--file ${TMP_TEST_FILE}" "" 0 "${testSuccessGrep}" \
            "query / file tests - run external cypher file with valid query, validate output"
 
   runShell ${RCODE_MISSING_INPUT_FILE} "FILE" "" "--file NoFile22432.cypher" "" 0 "" \
            "query / file tests - run external cypher file missing file"
 
-  echo "${TEST_SHELL}" > ${tmpTestFile}
-  echo "${testSuccessQry}" >> ${tmpTestFile}
-  runShell ${RCODE_SUCCESS} "FILE" "" "--file ${tmpTestFile}" "" 0 "" \
+  echo "${TEST_SHELL}" > ${TMP_TEST_FILE}
+  echo "${testSuccessQry}" >> ${TMP_TEST_FILE}
+  runShell ${RCODE_SUCCESS} "FILE" "" "--file ${TMP_TEST_FILE}" "" 0 "" \
            "query / file tests - executing shell name at beginning of text before cypher"
-  rm ${tmpTestFile}
+  rm ${TMP_TEST_FILE}
 
   # SAVE FILE TESTS
   printf "\n*** Starting save file test ***\n" 

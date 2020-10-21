@@ -183,11 +183,12 @@ dashHelpOutput() {
   
     Define an editor that can be started from the command line in insert mode.
     This *requires* '<editor command line with options>' be single quotes if
-    there are command line options needed.  For example to launch atom or
-    sublime:
+    there are command line options needed.  For example to launch nano, atom,
+    or sublime:
 
-      sublime: ${shellName} -E 'subl --new-window --wait'
-         atom: ${shellName} -E 'atom --new-window --wait'
+        nano: ${shellName} -E 'nano -t'
+     sublime: ${shellName} -E 'subl --new-window --wait'
+        atom: ${shellName} -E 'atom --new-window --wait'
 
   -L | --lessOpts <'less command options'>
   
@@ -366,14 +367,14 @@ setDefaults () {
    # Return codes are meant mostly for non-interactive (e.g. run once) or critical error exit
    # cypher-shell returns 1 on any failure
   RCODE_SUCCESS=0
+  RCODE_CYPHER_SHELL_ERROR=1
   RCODE_INVALID_CMD_LINE_OPTS=2
   RCODE_CYPHER_SHELL_NOT_FOUND=3
-  RCODE_CYPHER_SHELL_ERROR=4
-  RCODE_INVALID_FORMAT_STR=5
-  RCODE_NO_USER_NAME=6
-  RCODE_NO_PASSWORD=7
-  RCODE_EMPTY_INPUT=8
-  RCODE_MISSING_INPUT_FILE=9
+  RCODE_INVALID_FORMAT_STR=4
+  RCODE_NO_USER_NAME=5
+  RCODE_NO_PASSWORD=6
+  RCODE_EMPTY_INPUT=7
+  RCODE_MISSING_INPUT_FILE=8
 
    # Start first exec for vi in append mode.
   vi_initial_open_opts=' +star '
@@ -391,11 +392,6 @@ setDefaults () {
   TMP_DB_CONN_QRY_FILE="tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
   TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
-   # set query and output file names - they will not change if no save file options are set
-  printf -v cypherFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${QRY_FILE_POSTFIX}
-   # $resultsFile is only used if output file is to be saved
-  printf -v resultsFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${RESULTS_FILE_POSTFIX}
-
 }
 
 # either or, works for one char answers, e.g. [Yy]
@@ -414,7 +410,7 @@ yesOrNo() {
 
 printContinueOrExit() {
   local msg=${1:-""}
-  if [[ ${run_once} ]]; then # don't give option to continue
+  if [[ ${run_once}  == "Y" ]]; then # don't give option to continue
     exitShell ${cypherRetCode}
   fi
   if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
@@ -501,8 +497,9 @@ getArgs() {
 
   user_name=""               # blank string by default
   user_password=""
-  cypherShellArgs=""         # any cypher-shell args passed in
+  cypherShellArgs=""         # any args not in case are assumed to be cypher-shell specific args passed in
   cypher_format_arg="--format verbose " # need extra space at end for param validation test
+  cypher_shell_cmd_line=""   # a string with all the cypher-shell specific command line opts, if passed in.
   no_login_needed="N"        # skip login prompting
   save_all="N"               # save each query and output to own files
   save_cypher="N"            # save each query in own file
@@ -516,7 +513,7 @@ getArgs() {
   use_params=""              # query parameter arguments
   input_cypher_file_name=""  # intput file
   use_this_cypher_shell=""   # cypher-shell to use. mostly for desktop
-  editor_cnt=0               # = 1 if using vi or external editor, > 1 error
+  external_editor=0               # = 1 if using vi or external editor, > 1 error
 
   cypherRetCode=${RCODE_SUCCESS} # cypher-shell return code
 
@@ -593,14 +590,14 @@ getArgs() {
         # editor options
       -V | --vi)
          getOptArgs 0 "$@"
-         (( editor_cnt++ ))
+         (( external_editor++ ))
          editor_to_use="vi" 
          coll_args="${coll_args} ${_currentParam} "
          shift $_shiftCnt # go past number of params processed
          ;;
       -E | --editor)
          getOptArgs -1  "$@"
-         (( editor_cnt++ ))
+         (( external_editor++ ))
          editor_to_use="${_retOpts}"
          coll_args="${coll_args} ${_currentParam}"
          shift $_shiftCnt # go past number of params processed
@@ -690,7 +687,7 @@ getArgs() {
     retCode=${RCODE_INVALID_FORMAT_STR}
   fi
 
-  if [[ ${editor_cnt} -gt 1 ]]; then
+  if [[ ${external_editor} -gt 1 ]]; then
     messageOutput "Invalid command line options.  Cannot use vi and another editor at the same time."
     retCode=${RCODE_INVALID_CMD_LINE_OPTS}
   fi
@@ -702,7 +699,7 @@ getArgs() {
 
   if [[ ${is_pipe} == "Y" ]]; then
     have_error="N"
-    if [[ ${editor_cnt} -gt 0 ]]; then  # could do this, but why?
+    if [[ ${external_editor} -gt 0 ]]; then  # could do this, but why?
       messageOutput "Cannot use external editor and pipe input at the same time."
       retCode=${RCODE_INVALID_CMD_LINE_OPTS}
     elif [[ ! -z ${input_cypher_file} ]]; then
@@ -724,38 +721,16 @@ getArgs() {
     cmd_arg_msg="Script started with: ${coll_args}"
   fi
 
+    # string with all the cypher-shell only command line arguments. 
+  cypher_shell_cmd_line="${user_name} ${user_password} ${use_params} ${cypherShellArgs} ${cypher_format_arg}"
+
 }
 
-generateFileNames () {
-  (( file_nbr++ )) # increment file nbr if saving files
-  date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
-  printf -v cypherFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${QRY_FILE_POSTFIX}
-  printf -v resultsFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${RESULTS_FILE_POSTFIX}
-}
 
-intermediateFileHandling () {
-  # flags on what to do with files and userEditor to keep
-  # current query file around for editing (overwrite new cypherFile)
-
-  if [[ ${save_all} == "Y" || ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then 
-    if [[ ${editor_cnt} -eq 1 && ${edit_cnt} -ne 0 ]]; then
-      cp ${cypherFile} ${TMP_FILE}
-    fi
-
-    generateFileNames
-
-    if [[ ${editor_cnt} -eq 1 && ${edit_cnt} -ne 0 ]]; then
-      mv ${TMP_FILE} ${cypherFile} # cypher error external editor, use last file
-    fi
-
-  fi
-
-   # if have input file and just starting, then use it as the first file to work with
-  if [[ ${edit_cnt} -eq 0 && ! -z ${input_cypher_file} ]]; then # have input cypher file
-    cp ${input_cypher_file_name} ${cypherFile}
-  fi
-}
  
+cleanupConnectFiles() {
+  rm ${TMP_DB_CONN_QRY_FILE} ${TMP_DB_CONN_RES_FILE} >/dev/null 2>&1
+}
 
 exitCleanUp() {
   if [[ ${save_cypher} == "Y" || ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
@@ -780,8 +755,7 @@ exitCleanUp() {
 
    # files for connection testing.  
   find . -maxdepth 1 -type f -name "${TMP_FILE}" -exec rm {} \; # remove message and temp file
-  find . -maxdepth 1 -type f -name "${TMP_DB_CONN_QRY_FILE}"  -exec rm {} \; # remove message and temp file
-  find . -maxdepth 1 -type f -name "${TMP_DB_CONN_RES_FILE}"  -exec rm {} \;
+  cleanupConnectFiles
   
   if [[ ${is_pipe} == "N" ]]; then
     stty echo sane # reset stty just in case
@@ -848,16 +822,89 @@ getCypherShellLogin () {
       echo
     fi
   fi
-
 }
 
+
+verifyCypherShell () {
+  # connect to cypher-shell and get details
+  messageOutput "Connecting to database"
+
+  getCypherShellLogin # get cypher-shell login credentials if needed
+  echo "${db_ver_qry}" > ${TMP_DB_CONN_QRY_FILE}    # get database version query
+  runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"
+  #eval "${use_this_cypher_shell} ${cypher_shell_cmd_line} ${user_name} ${user_password} ${cypherShellArgs} --format plain < ${TMP_DB_CONN_QRY_FILE} > ${TMP_DB_CONN_RES_FILE} 2>&1"
+
+  if [[ ${quiet_output} == "N" && ${is_pipe} == "N" ]]; then
+    msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
+    db_version=${msg_arr[@]:0:1}
+    db_edition=${msg_arr[@]:1:1}
+    db_username=${msg_arr[@]:2:1}
+   
+    #  v 4, db.info gives you current database name
+    # db.info ->  "neo4j" "2020-08-03T16:54:43.627Z"
+    # dbms.components -> "Neo4j Kernel" ["4.1.1"] "community"
+    #  v 3
+    # db.components ->  ["3.5.20"]  "communiqryFileCnt as user %s" ${db_edition} ${db_version} ${db_username}
+    printf -v msg "Using Neo4j %s version %s as user %s" ${db_edition} ${db_version} ${db_username}
+    if [[ ${db_version} == *$'4.'* ]]; then
+
+      echo "${db_40_db_name_qry}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
+    
+      # eval "${use_this_cypher_shell} ${cypher_shell_cmd_line} ${user_name} ${user_password} ${cypherShellArgs} --format plain > ${TMP_DB_CONN_RES_FILE} 2>&1"
+      runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
+      msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
+      db_name=${msg_arr[@]:0:1}
+      msg="${msg} in database ${db_name}"
+      messageOutput "${msg}"
+    fi
+
+    if [[ ${external_editor} -eq 1 ]]; then
+      printContinueOrExit "Using ${editor_to_use}. "
+    fi
+  fi
+  cleanupConnectFiles
+}
+
+generateFileNames () {
+  (( file_nbr++ )) # increment file nbr if saving files
+  date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
+  printf -v cypherFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${QRY_FILE_POSTFIX}
+  printf -v resultsFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${RESULTS_FILE_POSTFIX}
+}
+
+
+
+runInternalCypher () {
+  local qry_file 
+  local out_file 
+  qry_file="${1}"
+  out_file="${2}"
+
+   # cypher-shell with no formatting args to be able to parse the output string
+  ${use_this_cypher_shell} ${user_name} ${user_password} ${cypherShellArgs} --format plain < ${qry_file} > ${out_file} 2>&1
+  cypherRetCode=$?
+  if [[ ${cypherRetCode} -ne 0 ]]; then
+    messageOutput ""
+    messageOutput "=========="
+    messageOutput "ERROR: cypher-shell generated error"
+    messageOutput "Using this cypher-shell: ${use_this_cypher_shell}"
+    messageOutput "cypher-shell return code: ${cypherRetCode}"
+    messageOutput "Script started with: ${coll_args}"
+    messageOutput "Arguments passed to cypher-shell: ${cypherShellArgs}"
+    messageOutput "cypher-shell output:"
+    messageOutput "$(cat ${out_file})"
+    messageOutput "=========="
+    messageOutput ""
+
+    exitShell ${cypherRetCode}
+  fi
+}
 
  # look to see if this shell launch statement is included in the input and
  # remove it if shell has already been run
 cleanAndRunCypher () {
 
   qry_start=$(date +%s)
-  cypher_shell_cmd_line="${1}" # cypher-shell command line options
 
   sed -i '' "/.*${shellName}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
   # check to see if the cypher file is empty
@@ -865,6 +912,7 @@ cleanAndRunCypher () {
   if [[ $? -ne 0 ]]; then
     cypherRetCode=${RCODE_EMPTY_INPUT} # do not run cypher, trigger continue or exit msg
     messageOutput "Empty input. No cypher to run."
+    printContinueOrExit
   else   # put in semicolon at end if needed, command line opts / run cypher-shell
 
      # add semicolon to end of file if not there.  need it for cypher to run
@@ -872,7 +920,7 @@ cleanAndRunCypher () {
     if [[ $? -ne 0 ]]; then
       printf "%s" ";" >> ${cypherFile}
     fi
-     # run cypher in cypher-shell
+     # run cypher in cypher-shell, use eval to allow printf to run in correct order
     if [[ ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
@@ -892,90 +940,68 @@ cleanAndRunCypher () {
   fi
 }
 
-verifyCypherShell () {
-  # connect to cypher-shell and get details
-  messageOutput "Connecting to database"
+intermediateFileHandling () {
+  # flags on what to do with files and userEditor to keep
+  # current query file around for editing (overwrite new cypherFile)
 
-  echo $db_ver_qry > ${TMP_DB_CONN_QRY_FILE}    # get database version query
-  getCypherShellLogin # get cypher-shell login credentials if needed
-  eval "${use_this_cypher_shell} ${cypher_shell_cmd_line} ${user_name} ${user_password} ${cypherShellArgs} --format plain < ${TMP_DB_CONN_QRY_FILE}  > ${TMP_DB_CONN_RES_FILE} 2>&1"
-  #  cleanAndRunCypher "${user_name} ${user_password} ${cypherShellArgs} --format plain"
-  if [[ $? -eq 0 ]]; then # clean login to db
-
-    if [[ ${quiet_output} == "N" && ${is_pipe} == "N" ]]; then
-      msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
-      db_version=${msg_arr[@]:0:1}
-      db_edition=${msg_arr[@]:1:1}
-      db_username=${msg_arr[@]:2:1}
-      #  v 4, db.info gives you current database name
-      # db.info -> 	"neo4j"	"2020-08-03T16:54:43.627Z"
-      # dbms.components -> "Neo4j Kernel"	["4.1.1"]	"community"
-      #  v 3
-      # db.components -> 	["3.5.20"]	"communiqryFileCnt as user %s" ${db_edition} ${db_version} ${db_username}
-      printf -v msg "Using Neo4j %s version %s as user %s" ${db_edition} ${db_version} ${db_username}
-
-      if [[ ${db_version} == *$'4.'* ]]; then
-         # let's assume this works, and it's OK if it doesn't
-        echo "${db_40_db_name_qry}" > ${cypherFile}
-        # cleanAndRunCypher "${user_name} ${user_password} ${cypherShellArgs} --format plain"
-        eval "${use_this_cypher_shell} ${cypher_shell_cmd_line} ${user_name} ${user_password} ${cypherShellArgs} --format plain < ${TMP_DB_CONN_QRY_FILE}  > ${TMP_DB_CONN_RES_FILE} 2>&1"
-        msg_arr=($(tail -1 ${resultsFile} | tr ', ' '\n')) # tr for macOS
-        db_name=${msg_arr[@]:0:1}
-        msg="${msg} in database ${db_name}"
-      fi
-      rm ${TMP_DB_CONN_QRY_FILE} ${TMP_DB_CONN_RES_FILE}
-      clear
-      messageOutput "${msg}"
-      if [[ ${editor_cnt} -eq 1 ]]; then
-        printContinueOrExit "Using ${editor_to_use}. "
-      fi
-
+  if [[ ${edit_cnt} -ne 0 ]]; then
+    if [[ ${save_all} == "Y" || ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then
+      mv ${cypherFile} ${TMP_FILE}
+      generateFileNames
+      mv ${TMP_FILE} ${cypherFile} 
     fi
-  else # ERROR cypherRetCode != 0
-    messageOutput "ERROR: cypher-shell return code: ${cypherRetCode}"
-    messageOutput "Script started with: ${coll_args}"
-    messageOutput "Ran: cypher-shell ${cypher_shell_cmd_line} "
-    messageOutput "cypher-shell results:"
-    messageOutput "$(cat ${resultsFile})"
-    rm -f ${cypherFile} ${resultsFile}
-    exitShell ${cypherRetCode}
+  else # first time through
+    generateFileNames
+    if [[ ! -z ${input_cypher_file_name} ]]; then
+      cp ${input_cypher_file_name} ${cypherFile}
+    else 
+      cat /dev/null > ${cypherFile}
+    fi
   fi
 }
 
-
 # input cypher text, either from pipe, editor, or stdin (usually terminal window in editor)
-
 getCypherText () {
-  # { cat <&3 3<&- & } 3<&0 > ${cypherFile}
-  if [[ ${editor_cnt} -eq 0 ]]; then
-    if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
-      messageOutput "==> USE Ctl-D on a blank line to terminate stdin and execute cypher statement. ${edit_cnt} edits in this session"
-      messageOutput "        Ctl-C to terminate stdin and exit ${shellName} without running cypher statement."
-    fi
-    cat /dev/null > ${cypherFile}
-    while IFS= read -r line; do
-       printf '%s\n' "$line" >> ${cypherFile}
-    done
-  else # using external editor
-    while true; do
-      if [[ ${editor_to_use} != "vi" ]]; then
-        eval ${editor_to_use} ${cypherFile}
-      else # using vi
-        if [[ ${edit_cnt} -eq 0 &&  -z "${input_cypher_file}" ]]; then
-          eval "${editor_to_use} ${vi_initial_open_opts} ${cypherFile}" # open file option +star (new file)
-        else
-          eval "${editor_to_use} ${cypherFile}"
-        fi
+  
+   # outside if evalutes to true only if it's the first run
+   # skip getting input if have input cypher file && no edits && not using external editor
+  if [[ ${edit_cnt} -gt 0 || -z ${input_cypher_file_name} ]]; then 
+    if [[ ${external_editor} -eq 0 ]]; then
+      if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
+        messageOutput "==> USE Ctl-D on a blank line to terminate stdin and execute cypher statement. ${edit_cnt} edits in this session"
+        messageOutput "        Ctl-C to terminate stdin and exit ${shellName} without running cypher statement."
       fi
-      # ask user if they want to run file or go back to edit
-      yesOrNo "Run query (y) or continue to edit (n)? Ctl-C to exit ${shellName}? "
-      clear
-      if [[ $? -eq 1 ]]; then # answered 'n', continue
-        continue  # go back to edit on same file
-      else # answered yes to running query
-        break
-      fi # continue with new intermediate files
-    done
+        
+      if [[ ! -z ${input_cypher_file_name} && ${edit_cnt} -eq 0 ]]; then # running from a file on first input
+        cat ${input_cypher_file_name} | tee ${cypherFile} 
+       else
+         cat /dev/null > ${cypherFile}  # start clean since we're not in an editor
+       fi
+        # execute query w/o input if have input file and doing a -1 option
+      while IFS= read -r line; do
+        printf '%s\n' "$line" >> ${cypherFile}
+      done
+    else # using external editor
+      while true; do
+        if [[ ${editor_to_use} != "vi" ]]; then
+          eval ${editor_to_use} ${cypherFile}
+        else # using vi
+          if [[ ${edit_cnt} -eq 0 &&  -z "${input_cypher_file}" ]]; then
+            eval "${editor_to_use} ${vi_initial_open_opts} ${cypherFile}" # open file option +star (new file)
+          else
+            eval "${editor_to_use} ${cypherFile}"
+          fi
+        fi
+        # ask user if they want to run file or go back to edit
+        yesOrNo "Run query (y) or continue to edit (n)? Ctl-C to exit ${shellName}? "
+        if [[ $? -eq 1 ]]; then # answered 'n', continue
+          clear
+          continue  # go back to edit on same file
+        else # answered yes to running query
+          break
+        fi # continue with new intermediate files
+      done
+    fi
   fi
   (( edit_cnt++ ))  # increment query edit count
 }
@@ -993,12 +1019,12 @@ executionLoop () {
     intermediateFileHandling  # intermediate files for cypher and output
     getCypherText  # consume input
 
-    cleanAndRunCypher "${user_name} ${user_password} ${use_params} ${cypherShellArgs} ${cypher_format_arg}"
+    cleanAndRunCypher 
 
     if [[ ${cypherRetCode} -eq 0 ]]; then
       # messageOutput "Finished query execution: $(date)"
       (( success_run_cnt++ ))
-      if [[ ${editor_cnt} -eq 1 ]]; then # don't go straight back into editor
+      if [[ ${external_editor} -eq 1 ]]; then # don't go straight back into editor
         printContinueOrExit
       fi
     else # ERROR running cypher code
