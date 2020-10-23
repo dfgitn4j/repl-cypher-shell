@@ -1,4 +1,4 @@
-set -xv
+#set -xv
 # script to front-end cypher-shell and pass output to pager
 
 ### shell accomodations
@@ -459,9 +459,11 @@ printContinueOrExit() {
     exitShell "${cypherRetCode}"
   fi
   if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
-    enterYesNoQuit "<CR>q" "${msg}Press Enter to continue, [Q|q] to quit. "
-    # printf "%s\n" "${msg}Press Enter to continue. Ctl-C to exit ${shellName} "
-    # read n
+    if [[ -z ${msg} ]]; then
+      enterYesNoQuit "<CR>q" "Press Enter to continue, [Q|q] to quit. "
+    else 
+      enterYesNoQuit "<CR>q" "${msg} Press Enter to continue, [Q|q] to quit. "
+    fi
   fi
 }
 
@@ -743,7 +745,7 @@ getArgs() {
     messageOutput "Invalid command line options.  Cannot use an editor and run once at the same time."
     retCode=${RCODE_INVALID_CMD_LINE_OPTS}
   elif [[ -n ${input_cypher_file_name} && ! -f ${input_cypher_file_name} ]]; then # missing input file
-    messageOutput "Missing file for parameter '${input_cypher_file}'."
+    messageOutput "File '${input_cypher_file}' with cypher query does not exist."
     retCode=${RCODE_MISSING_INPUT_FILE}
   elif [[ ${is_pipe} == "Y" ]]; then
     have_error="N"
@@ -827,8 +829,6 @@ exitShell() {
 
 # validate cypher-shell in PATH
 haveCypherShell () {
-echo "in have"
-read n
   # ck to see if you can connect to cypher-shell w/o error
   if [[ -z ${use_this_cypher_shell} ]]; then
     if ! which cypher-shell > /dev/null; then
@@ -907,7 +907,7 @@ verifyCypherShell () {
     fi
 
     if [[ ${external_editor} -eq 1 ]]; then
-      printContinueOrExit "Using '${editor_to_use}' as editor. "
+      printContinueOrExit "Using '${editor_to_use}' as editor."
     fi
   fi
   cleanupConnectFiles
@@ -946,25 +946,25 @@ cleanAndRunCypher () {
   sed -i '' "/.*${shellName}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
   # check to see if the cypher file is empty
   
-  if ! grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherFile}" >/dev/null 2>&1 ; then
+  grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherFile}" >/dev/null 2>&1 
+  if [[ $? -ne 0 ]]; then
     cypherRetCode=${RCODE_EMPTY_INPUT} # do not run cypher, trigger continue or exit msg
     printContinueOrExit "Empty input. No cypher to run."
-  else   # put in semicolon at end if needed, command line opts / run cypher-shell
+  else 
 
      # add semicolon to end of file if not there.  need it for cypher to run
-    sed '1!G;h;$!d' ${cypherFile} | awk 'NF{print;exit}' | grep --extended-regexp --quiet '^.*;\s*$|;\s*//.*$'
-    if [[ $? -ne 0 ]]; then
+    if ! sed '1!G;h;$!d' ${cypherFile} | awk 'NF{print;exit}' | grep --extended-regexp --quiet '^.*;\s*$|;\s*//.*$'; then
       printf "%s" ";" >> ${cypherFile}
     fi
      # run cypher in cypher-shell, use eval to allow printf to run in correct order
     if [[ ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            '${use_this_cypher_shell}'' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less "${less_options}"
+            '${use_this_cypher_shell} ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
     else # saving results file, run with tee command
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            '${use_this_cypher_shell}'' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less "${less_options}"
+            '${use_this_cypher_shell}' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less 
     fi
 
      # ck return code - PIPESTATUS[0] for bash, pipestatus[1] for zsh
@@ -1070,7 +1070,7 @@ executionLoop () {
       # messageOutput "Finished query execution: $(date)"
       (( success_run_cnt++ ))
       if [[ ${external_editor} -eq 1 ]]; then # don't go straight back into editor
-        printContinueOrExit
+        printContinueOrExit "Using editor."
       fi
     else # ERROR running cypher code
       if [[ ${exit_on_error} == "Y" || ${is_pipe} == "Y" ]]; then # print error and exit
