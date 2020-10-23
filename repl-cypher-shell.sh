@@ -1,4 +1,4 @@
-#set -xv
+set -xv
 # script to front-end cypher-shell and pass output to pager
 
 ### shell accomodations
@@ -8,7 +8,6 @@
 # cypher-shell "${args[@]}"
 setopt SH_WORD_SPLIT >/dev/null 2>&1
 set -o pipefail
-shellName=${0##*/}  # shell name
 
 usage() {
 
@@ -36,6 +35,7 @@ usage() {
     [-S | --saveCypher]      save each query statement in a file.
     [-R | --saveResults]     save each query output in a file.
     [-V | --vi]              use vi editor.
+    [--nano]                Use nano editor started with 'nano -t' flag.
     [-E | --editor] [cmd]    use external editor. Run --help for how to use.
     [-L | --lessOpts] [opts] use these less pager options instead of defaults.
 
@@ -152,13 +152,13 @@ dashHelpOutput() {
     format:
   
 
-        cypher query: ${OUTPUT_FILES_PREFIX}_[datetime query was run]_[session ID]-[qry nbr].${QRY_FILE_POSTFIX}
-        results text: ${OUTPUT_FILES_PREFIX}_[datetime query was run]_[session ID]-[qry nbr].${RESULTS_FILE_POSTFIX}
+        cypher query: ${OUTPUT_FILES_PREFIX}_[datetime query was run]_[session ID]-[qry nbr]${QRY_FILE_POSTFIX}
+        results text: ${OUTPUT_FILES_PREFIX}_[datetime query was run]_[session ID]-[qry nbr]${RESULTS_FILE_POSTFIX}
   
         For example:
 
-        cypher query: $(printf "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} $(date +%FT%I-%M-%S%p) ${SESSION_ID} 1 ${QRY_FILE_POSTFIX})
-        results text: $(printf "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} $(date +%FT%I-%M-%S%p) ${SESSION_ID} 1 ${RESULTS_FILE_POSTFIX})
+        cypher query: $(printf "%s_%s_%s-%d%s" "${OUTPUT_FILES_PREFIX}" "$(date +%FT%I-%M-%S%p)" "${SESSION_ID}" 1 "${QRY_FILE_POSTFIX}")
+        results text: $(printf "%s_%s_%s-%d%s" "${OUTPUT_FILES_PREFIX}" "$(date +%FT%I-%M-%S%p)" "${SESSION_ID}" 1 "${RESULTS_FILE_POSTFIX}")
 
   -S | --saveCypher)
   
@@ -179,6 +179,10 @@ dashHelpOutput() {
     Use vi editor for cypher input instead of stdin.  Use when running from
     command line versus and embedded terminal.
 
+  --nano)
+  
+    Use nano editor started with 'nano -t' flag for convenience.
+
   -E | --editor <'editor command line with options'>
   
     Define an editor that can be started from the command line in insert mode.
@@ -186,7 +190,6 @@ dashHelpOutput() {
     there are command line options needed.  For example to launch nano, atom,
     or sublime:
 
-        nano: ${shellName} -E 'nano -t'
      sublime: ${shellName} -E 'subl --new-window --wait'
         atom: ${shellName} -E 'atom --new-window --wait'
 
@@ -354,6 +357,8 @@ setDefaults () {
   # pipe input?
  [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"
 
+ shellName=${0##*/}  # shell name
+
  db_ver_qry="CALL dbms.components() YIELD name, versions, edition
   WITH name, versions, edition WHERE name='Neo4j Kernel'
   CALL dbms.showCurrentUser() YIELD username
@@ -394,28 +399,69 @@ setDefaults () {
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
 }
 
-# either or, works for one char answers, e.g. [Yy]
-yesOrNo() {
+# ${1} is the string to find
+# $@ remaining argumets are strings to find
+findStr() {
+  local lookFor
+  local inThis
+  lookFor="${1}"
+  shift
+  for arg in "$@"; do inThis="${inThis} ${arg}"; done
+  echo "${inThis}" | grep --extended-regexp --ignore-case --quiet -e "${lookFor}"
+  return $?
+}
+
+# ${1} is valid response pattern in form of "<CR>YNQynq", <CR> defaults to Yes
+# ${2} is the  message for the user
+enterYesNoQuit() {
+  local valid_opts
+  local msg
   if [[ ${is_pipe} == "N" ]]; then
-    msg=${1}
+    if [[ -z ${1} ]]; then
+      valid_opts="<CR>YNQynq"
+    else 
+      valid_opts="${1}"
+    fi
+    if [[ -z ${2} ]]; then 
+      msg="[<Enter>|Y|y] to continue, [N|n] to return, [<Ctl-C>|Q|q] to quit."
+    else
+      msg="${2}"
+    fi
     printf "%s" "${msg}"
-    read option
-    case ${option} in
-      [Yy]) return 0  ;; # you can change what you do here for instance
-      [Nn]) return 1  ;;
-      *) yesOrNo "$msg"  ;;
-    esac
+    
+    read -r option  
+    printf -v option "%.1s" "${option}" # get 1st char - no read -N 1 on osx, bummer
+    findStr "${option}" "${valid_opts}"
+    if [[ $? -eq 1 ]]; then
+      messageOutput "'${option}' is an invalid choice."
+      enterYesNoQuit "${valid_opts}" "${msg}"
+    else
+      case ${option} in
+        [Yy]) return 0 ;; 
+        [Nn]) return 1 ;;
+        [Qq]) exitShell ;;
+        *) 
+          if [[ -z ${option} ]]; then # press return
+            return 0
+          else
+            enterYesNoQuit "${valid_opts}" "${msg}"
+          fi  
+        ;;
+      esac
+    fi
   fi
+  clear
 }
 
 printContinueOrExit() {
   local msg=${1:-""}
   if [[ ${run_once}  == "Y" ]]; then # don't give option to continue
-    exitShell ${cypherRetCode}
+    exitShell "${cypherRetCode}"
   fi
   if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
-    printf "%s\n" "${msg}Press Enter to continue. Ctl-C to exit ${shellName} "
-    read n
+    enterYesNoQuit "<CR>q" "${msg}Press Enter to continue, [Q|q] to quit. "
+    # printf "%s\n" "${msg}Press Enter to continue. Ctl-C to exit ${shellName} "
+    # read n
   fi
 }
 
@@ -492,7 +538,6 @@ getArgs() {
   # Note: less will clear screen before user sees ouput if the quit-at-end options
   # are used. e.g. --quit-at-eof.  Look for comment with string "LESS:" in script
   # if this behavior bugs you.
-  use_pager='less'
   less_options='--LONG-PROMPT --shift .05'
 
   user_name=""               # blank string by default
@@ -527,45 +572,45 @@ getArgs() {
          getOptArgs 1  "$@"
          user_name="${_currentParam} ${_retOpts}"
          coll_args="${coll_args} ${user_name}"
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -p | --password ) # username to connect as.
          getOptArgs 1  "$@"
          user_password="${_currentParam} ${_retOpts}"
          coll_args="${coll_args} ${user_password}"
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -C | --cypher-shell ) # username to connect as.
          getOptArgs 1  "$@"
          use_this_cypher_shell="${_retOpts}"
          coll_args="${coll_args} ${use_this_cypher_shell}"
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -P | --param)
          getOptArgs 1  "$@"
          use_params="${use_params} ${_currentParam} '${_retOpts}'"
          coll_args="${coll_args} ${use_params}"
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -f | --file ) # cypher file name
          getOptArgs 1 "$@"
          input_cypher_file="${_currentParam} ${_retOpts}"
-         input_cypher_file_name="$(echo ${input_cypher_file} | sed -E -e 's/(--file|-f)[[:space:]]*//')"
-         shift $_shiftCnt # go past number of params processed
+         input_cypher_file_name="$(echo "${input_cypher_file}" | sed -E -e 's/(--file|-f)[[:space:]]*//')"
+         shift "${_shiftCnt}" # go past number of params processed
          coll_args="${coll_args} ${input_cypher_file}"
          ;;
       --format)
          getOptArgs 1 "$@"
          # note the extra space at end of cypher_format_arg makes validation testing below easier
          cypher_format_arg="${_currentParam} ${_retOpts} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          coll_args="${coll_args} ${cypher_format_arg}"
          ;;
         # one and done cyphe-shell command line options
       -v | --version | --driver-version) # keep cypher queries and output results files.
          getOptArgs 0 "$@"
          cypherShellInfoArg=${_currentParam}
-         shift $_shiftCnt
+         shift "${_shiftCnt}"
          ;;
         # begin shell specific options
         # save optoins
@@ -573,19 +618,19 @@ getArgs() {
          getOptArgs 0 "$@"
          save_all="Y"
          coll_args="${coll_args} ${_currentParam}"
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -S | --saveCypher) # keep the cypher queries around for future use.
          getOptArgs 0 "$@"
          save_cypher="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -R | --saveResults) # keep the cypher queries around for future use.
          getOptArgs 0 "$@"
          save_results="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
         # editor options
       -V | --vi)
@@ -593,16 +638,23 @@ getArgs() {
          (( external_editor++ ))
          editor_to_use="vi" 
          coll_args="${coll_args} ${_currentParam} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
+         ;;
+      --nano)
+         getOptArgs 0 "$@"
+         (( external_editor++ ))
+         editor_to_use="nano -t" 
+         coll_args="${coll_args} ${_currentParam} "
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -E | --editor)
          getOptArgs -1  "$@"
          (( external_editor++ ))
          editor_to_use="${_retOpts}"
          coll_args="${coll_args} ${_currentParam}"
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
-        # run options
+          # run options
           # override default less options
           # '-' and '--' command line options for less must have '-' prepended
           # with a backslash e.g. -L '\-\-line-numbers'
@@ -611,43 +663,43 @@ getArgs() {
          less_options="${_retOpts}"
          less_options=$(echo ${_retOpts} | sed -e 's/\\//g') # remove '\' from '\-'
          coll_args="${coll_args} ${_currentParam} ${_retOpts}"
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -c | --showCmdLn ) # show command line args in output
          getOptArgs 0 "$@"
          show_cmd_line="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -t | --time) # print time query started
          getOptArgs 0 "$@"
          qry_start_time="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -q | --quiet ) # minimal output
          getOptArgs 0 "$@"
          quiet_output="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -1 | --one) # run query execution loop only once
          getOptArgs 0 "$@"
          run_once="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -N | --noLogin) # flag to say don't need login prompt
          getOptArgs 0 "$@"
          no_login_needed="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -X | --exitOnError )
          getOptArgs 0 "$@"
          exit_on_error="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          ;;
       -h | --help)
          dashHelpOutput
@@ -666,7 +718,7 @@ getArgs() {
          getOptArgs -1 "$@"
          cypherShellArgs="${cypherShellArgs} ${_currentParam} ${_retOpts}"
          #cypherShellArgs="${cypherShellArgs} ${_currentParam}"
-         shift $_shiftCnt # go past number of params processed
+         shift "${_shiftCnt}" # go past number of params processed
          coll_args="${coll_args} ${cypherShellArgs}"
          ;;
      esac
@@ -676,33 +728,29 @@ getArgs() {
   # coll_args="${coll_args} ${use_params}"
 
   # first ck if have a one-and-done argument
-  if [[ ! -z ${cypherShellInfoArg} ]]; then
-     runCypherShellInfoCmd ${cypherShellInfoArg} # run info cmd and exit
+  if [[ -n ${cypherShellInfoArg} ]]; then
+    runCypherShellInfoCmd "${cypherShellInfoArg}" # run info cmd and exit
   fi
    # parameter checks.  well, kinda
   retCode=${RCODE_SUCCESS} 
-  echo "${cypher_format_arg}" | grep -q -E ' auto | verbose | plain '
-  if [[ $? -ne 0 ]]; then # invalid format option
-    messageOutput "Invalid --format option '${cypher_format_arg}'."
+  if ! echo "${cypher_format_arg}" | grep -q -E ' auto | verbose | plain '; then
+    messageOutput "Invalid --format option: '${cypher_format_arg}'."
     retCode=${RCODE_INVALID_FORMAT_STR}
-  fi
-
-  if [[ ${external_editor} -gt 1 ]]; then
+  elif [[ ${external_editor} -gt 1 ]]; then
     messageOutput "Invalid command line options.  Cannot use vi and another editor at the same time."
     retCode=${RCODE_INVALID_CMD_LINE_OPTS}
-  fi
-
-  if [[ ! -z ${input_cypher_file_name} && ! -f ${input_cypher_file_name} ]]; then # missing input file
+  elif [[ ${external_editor} -eq 1 && ${run_once} == "Y" ]]; then
+    messageOutput "Invalid command line options.  Cannot use an editor and run once at the same time."
+    retCode=${RCODE_INVALID_CMD_LINE_OPTS}
+  elif [[ -n ${input_cypher_file_name} && ! -f ${input_cypher_file_name} ]]; then # missing input file
     messageOutput "Missing file for parameter '${input_cypher_file}'."
     retCode=${RCODE_MISSING_INPUT_FILE}
-  fi
-
-  if [[ ${is_pipe} == "Y" ]]; then
+  elif [[ ${is_pipe} == "Y" ]]; then
     have_error="N"
     if [[ ${external_editor} -gt 0 ]]; then  # could do this, but why?
       messageOutput "Cannot use external editor and pipe input at the same time."
       retCode=${RCODE_INVALID_CMD_LINE_OPTS}
-    elif [[ ! -z ${input_cypher_file} ]]; then
+    elif [[ -n ${input_cypher_file} ]]; then
       messageOutput "Cannot use input file and pipe input at the same time."
       retCode=${RCODE_INVALID_CMD_LINE_OPTS}
     fi
@@ -744,7 +792,7 @@ exitCleanUp() {
         messageOutput "**** Don't forget about the saved $(( file_nbr*2 )) (${QRY_FILE_POSTFIX}) query results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
       elif [[ ${save_results} == "Y" ]]; then
         messageOutput "**** Don't forget about the saved ${file_nbr} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
-      elif [[ ${save_query} == "Y" ]]; then
+      elif [[ ${save_cypher} == "Y" ]]; then
         messageOutput "**** Don't forget about the saved ${file_nbr} query files (${QRY_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
       fi
     fi
@@ -765,6 +813,7 @@ exitCleanUp() {
 # exit shell with return code passed in
 exitShell() {
   if [ "${1}" -ne "${1}" ] 2>/dev/null; then # not an integer, then internal error
+    messageOutput "INTERNAL ERRrOR.  Sorry about that.  ${1}"
     retCode=-1
   elif [[ -z ${1} ]]; then # Ctl-C sent
     retCode=${RCODE_SUCCESS}
@@ -772,22 +821,22 @@ exitShell() {
     retCode=${1}
   fi
   exitCleanUp
-  exit ${retCode}
+  exit "${retCode}"
 
 }
 
 # validate cypher-shell in PATH
 haveCypherShell () {
-
+echo "in have"
+read n
   # ck to see if you can connect to cypher-shell w/o error
-  if [[ ${use_this_cypher_shell} == "" ]]; then
-    if [[ $(which cypher-shell > /dev/null;echo $?) -ne 0 ]]; then
+  if [[ -z ${use_this_cypher_shell} ]]; then
+    if ! which cypher-shell > /dev/null; then
       messageOutput "*** Error: cypher-shell not found.  Bye."
       exitShell ${RCODE_CYPHER_SHELL_NOT_FOUND}
     else
-      use_this_cypher_shell=$(which cypher-shell)
+      use_this_cypher_shell="$(which cypher-shell)"
     fi
-
   elif [ ! -x "${use_this_cypher_shell}" ]; then
     messageOutput "*** Error: --cypher-shell ${use_this_cypher_shell} parameter value for full path to cypher-shell not found or is not executable.  Bye."
     exitShell ${RCODE_CYPHER_SHELL_NOT_FOUND}
@@ -805,7 +854,7 @@ getCypherShellLogin () {
         exitShell ${RCODE_NO_USER_NAME}
       fi
       printf 'username: '
-      read user_name
+      read -r user_name
       user_name=" -u ${user_name} "  # for command line if needed
     fi
       # get password if needed
@@ -823,7 +872,6 @@ getCypherShellLogin () {
     fi
   fi
 }
-
 
 verifyCypherShell () {
   # connect to cypher-shell and get details
@@ -845,7 +893,7 @@ verifyCypherShell () {
     # dbms.components -> "Neo4j Kernel" ["4.1.1"] "community"
     #  v 3
     # db.components ->  ["3.5.20"]  "communiqryFileCnt as user %s" ${db_edition} ${db_version} ${db_username}
-    printf -v msg "Using Neo4j %s version %s as user %s" ${db_edition} ${db_version} ${db_username}
+    printf -v msg "Using Neo4j %s version %s as user %s" "${db_edition}" "${db_version}" "${db_username}"
     if [[ ${db_version} == *$'4.'* ]]; then
 
       echo "${db_40_db_name_qry}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
@@ -859,20 +907,11 @@ verifyCypherShell () {
     fi
 
     if [[ ${external_editor} -eq 1 ]]; then
-      printContinueOrExit "Using ${editor_to_use}. "
+      printContinueOrExit "Using '${editor_to_use}' as editor. "
     fi
   fi
   cleanupConnectFiles
 }
-
-generateFileNames () {
-  (( file_nbr++ )) # increment file nbr if saving files
-  date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
-  printf -v cypherFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${QRY_FILE_POSTFIX}
-  printf -v resultsFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${RESULTS_FILE_POSTFIX}
-}
-
-
 
 runInternalCypher () {
   local qry_file 
@@ -881,7 +920,7 @@ runInternalCypher () {
   out_file="${2}"
 
    # cypher-shell with no formatting args to be able to parse the output string
-  ${use_this_cypher_shell} ${user_name} ${user_password} ${cypherShellArgs} --format plain < ${qry_file} > ${out_file} 2>&1
+  eval "'${use_this_cypher_shell}'" "${user_name}" "${user_password}" "${cypherShellArgs}" --format plain < "${qry_file}" > "${out_file}" 2>&1
   cypherRetCode=$?
   if [[ ${cypherRetCode} -ne 0 ]]; then
     messageOutput ""
@@ -892,7 +931,7 @@ runInternalCypher () {
     messageOutput "Script started with: ${coll_args}"
     messageOutput "Arguments passed to cypher-shell: ${cypherShellArgs}"
     messageOutput "cypher-shell output:"
-    messageOutput "$(cat ${out_file})"
+    messageOutput "$(cat "${out_file}")"
     messageOutput "=========="
     messageOutput ""
 
@@ -904,15 +943,12 @@ runInternalCypher () {
  # remove it if shell has already been run
 cleanAndRunCypher () {
 
-  qry_start=$(date +%s)
-
   sed -i '' "/.*${shellName}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
   # check to see if the cypher file is empty
-  grep --extended-regexp --quiet -e '[^[:space:]]' ${cypherFile} >/dev/null 2>&1
-  if [[ $? -ne 0 ]]; then
+  
+  if ! grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherFile}" >/dev/null 2>&1 ; then
     cypherRetCode=${RCODE_EMPTY_INPUT} # do not run cypher, trigger continue or exit msg
-    messageOutput "Empty input. No cypher to run."
-    printContinueOrExit
+    printContinueOrExit "Empty input. No cypher to run."
   else   # put in semicolon at end if needed, command line opts / run cypher-shell
 
      # add semicolon to end of file if not there.  need it for cypher to run
@@ -924,11 +960,11 @@ cleanAndRunCypher () {
     if [[ ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            ${use_this_cypher_shell} ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less
+            '${use_this_cypher_shell}'' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less "${less_options}"
     else # saving results file, run with tee command
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            ${use_this_cypher_shell} ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less
+            '${use_this_cypher_shell}'' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less "${less_options}"
     fi
 
      # ck return code - PIPESTATUS[0] for bash, pipestatus[1] for zsh
@@ -940,22 +976,36 @@ cleanAndRunCypher () {
   fi
 }
 
-intermediateFileHandling () {
-  # flags on what to do with files and userEditor to keep
-  # current query file around for editing (overwrite new cypherFile)
+generateFileNames () {
+  (( file_nbr++ )) # increment file nbr if saving files
+  date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
+  printf -v cypherFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${QRY_FILE_POSTFIX}
+  printf -v resultsFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${RESULTS_FILE_POSTFIX}
+}
 
+intermediateFileHandling () {
+  local cur_cypher_qry_file=${cypherFile}
+  generateFileNames
+  cat /dev/null > ${cypherFile} 
+    # if not first time through, ck to save files, blank resultsFile
   if [[ ${edit_cnt} -ne 0 ]]; then
-    if [[ ${save_all} == "Y" || ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then
-      mv ${cypherFile} ${TMP_FILE}
-      generateFileNames
-      mv ${TMP_FILE} ${cypherFile} 
+    if [[ ${external_editor} -eq 1 ]]; then # use previous file if using editor
+      cp ${cur_cypher_qry_file} ${cypherFile}
     fi
-  else # first time through
-    generateFileNames
-    if [[ ! -z ${input_cypher_file_name} ]]; then
+    if [[ ${save_all} == "Y" || ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then
+      if [[ ${save_cypher} == "N" ]]; then
+        rm -f ${cur_cypher_qry_file}
+      fi
+      if [[ ${save_results} == "N" ]]; then
+        rm -f ${resultsFile}  
+      fi
+    else # saving nothing
+      find . -maxdepth 1 -type f -name "${cur_cypher_qry_file}"  -exec rm {} \;
+      find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
+    fi
+  elif [[ ${edit_cnt} -eq 0 ]]; then # 1st time thru w/ input file
+    if [[ -n ${input_cypher_file_name} ]]; then
       cp ${input_cypher_file_name} ${cypherFile}
-    else 
-      cat /dev/null > ${cypherFile}
     fi
   fi
 }
@@ -963,45 +1013,40 @@ intermediateFileHandling () {
 # input cypher text, either from pipe, editor, or stdin (usually terminal window in editor)
 getCypherText () {
   
-   # outside if evalutes to true only if it's the first run
-   # skip getting input if have input cypher file && no edits && not using external editor
-  if [[ ${edit_cnt} -gt 0 || -z ${input_cypher_file_name} ]]; then 
-    if [[ ${external_editor} -eq 0 ]]; then
-      if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
-        messageOutput "==> USE Ctl-D on a blank line to terminate stdin and execute cypher statement. ${edit_cnt} edits in this session"
-        messageOutput "        Ctl-C to terminate stdin and exit ${shellName} without running cypher statement."
-      fi
-        
-      if [[ ! -z ${input_cypher_file_name} && ${edit_cnt} -eq 0 ]]; then # running from a file on first input
-        cat ${input_cypher_file_name} | tee ${cypherFile} 
-       else
-         cat /dev/null > ${cypherFile}  # start clean since we're not in an editor
-       fi
-        # execute query w/o input if have input file and doing a -1 option
-      while IFS= read -r line; do
-        printf '%s\n' "$line" >> ${cypherFile}
-      done
-    else # using external editor
-      while true; do
-        if [[ ${editor_to_use} != "vi" ]]; then
-          eval ${editor_to_use} ${cypherFile}
-        else # using vi
-          if [[ ${edit_cnt} -eq 0 &&  -z "${input_cypher_file}" ]]; then
-            eval "${editor_to_use} ${vi_initial_open_opts} ${cypherFile}" # open file option +star (new file)
-          else
-            eval "${editor_to_use} ${cypherFile}"
-          fi
-        fi
-        # ask user if they want to run file or go back to edit
-        yesOrNo "Run query (y) or continue to edit (n)? Ctl-C to exit ${shellName}? "
-        if [[ $? -eq 1 ]]; then # answered 'n', continue
-          clear
-          continue  # go back to edit on same file
-        else # answered yes to running query
-          break
-        fi # continue with new intermediate files
-      done
+  if [[ ${external_editor} -eq 0 ]]; then
+    if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
+      messageOutput "==> USE Ctl-D on a blank line to terminate stdin and execute cypher statement. ${edit_cnt} edits in this session"
+      messageOutput "        Ctl-C to terminate stdin and exit ${shellName} without running cypher statement."
     fi
+      
+    if [[ -n ${input_cypher_file_name} && ${edit_cnt} -eq 0 ]]; then # running from a file on first input
+      cat ${input_cypher_file_name} | tee ${cypherFile} 
+     else
+       cat /dev/null > ${cypherFile}  # start clean since we're not in an editor
+     fi
+      # execute query w/o input if have input file and doing a -1 option
+    while IFS= read -r line; do
+      printf '%s\n' "$line" >> ${cypherFile}
+    done
+  else # using external editor
+    while true; do
+      if [[ ${editor_to_use} != "vi" ]]; then
+        ${editor_to_use} ${cypherFile}
+      else # using vi
+        if [[ ${edit_cnt} -eq 0 &&  -z "${input_cypher_file}" ]]; then
+          ${editor_to_use} ${vi_initial_open_opts} ${cypherFile} # open file option +star (new file)
+        else
+          ${editor_to_use} ${cypherFile}
+        fi
+      fi
+      # ask user if they want to run file or go back to edit
+      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) return to edit, (q) to exit ${shellName} " 
+      if [[ $? -eq 1 ]]; then # answered 'n', continue
+        continue  # go back to edit on same file
+      else # answered yes to running query
+        break
+      fi # continue with new intermediate files
+    done
   fi
   (( edit_cnt++ ))  # increment query edit count
 }
@@ -1037,6 +1082,7 @@ executionLoop () {
     if [[ ${run_once} == "Y" || ${is_pipe} == "Y" ]]; then # exit shell if run 1, or is from a pipe
       exitShell ${cypherRetCode}
     fi
+    clear
 
   done
 }
@@ -1045,6 +1091,7 @@ executionLoop () {
 #trap exitShell ${cypherRetCode} EXIT
 trap exitShell SIGINT 
 
+clear
 setDefaults
 getArgs "$@"
 haveCypherShell

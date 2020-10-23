@@ -192,8 +192,8 @@ EOF
       existingFileCnt "${outputFilePattern}"
       if [[ ${_fileCnt} -eq ${expectedNbrFiles} ]]; then
         # clean up output files. not using find regex for portability
-        for rmFile in $(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" ) ; do
-          rm -f ${rmFile}
+        for rmFile in $(find . -type f -depth 0 | grep --color=never -E "${outputFilePattern}" ) ; do
+          rm ${rmFile}
         done 
       else # error, did not find the number of expected files
         updateSuccessCnt="N"
@@ -237,7 +237,9 @@ testsToRun () {
   export NEO4J_USERNAME
   NEO4J_PASSWORD=${pw}
   export NEO4J_PASSWORD
-
+  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--saveAll" "${saveAllFilePattern}" 2 "" \
+           "file tests - save cypher query and text results files."
+           
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   exitOnError="Y" # exit if runShell fails
   runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "" "" 0 "" \
