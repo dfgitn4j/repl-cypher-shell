@@ -907,7 +907,7 @@ verifyCypherShell () {
     fi
 
     if [[ ${external_editor} -eq 1 ]]; then
-      printContinueOrExit "Using '${editor_to_use}' as editor."
+      printContinueOrExit "Using ${editor_to_use} as editor."
     fi
   fi
   cleanupConnectFiles
@@ -957,11 +957,12 @@ cleanAndRunCypher () {
       printf "%s" ";" >> ${cypherFile}
     fi
      # run cypher in cypher-shell, use eval to allow printf to run in correct order
+     # saving results file, run with tee command
     if [[ ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            '${use_this_cypher_shell} ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
-    else # saving results file, run with tee command
+            '${use_this_cypher_shell}' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
+    else 
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
             '${use_this_cypher_shell}' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less 
@@ -1013,7 +1014,10 @@ intermediateFileHandling () {
 # input cypher text, either from pipe, editor, or stdin (usually terminal window in editor)
 getCypherText () {
   
-  if [[ ${external_editor} -eq 0 ]]; then
+  if [[ -n ${input_cypher_file_name} && ${run_once} == "Y" ]]; then
+    cat ${input_cypher_file_name} > ${cypherFile}  # run once with input file
+    return
+  elif [[ ${external_editor} -eq 0 ]]; then # using stdin
     if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
       messageOutput "==> USE Ctl-D on a blank line to terminate stdin and execute cypher statement. ${edit_cnt} edits in this session"
       messageOutput "        Ctl-C to terminate stdin and exit ${shellName} without running cypher statement."
@@ -1021,9 +1025,9 @@ getCypherText () {
       
     if [[ -n ${input_cypher_file_name} && ${edit_cnt} -eq 0 ]]; then # running from a file on first input
       cat ${input_cypher_file_name} | tee ${cypherFile} 
-     else
-       cat /dev/null > ${cypherFile}  # start clean since we're not in an editor
-     fi
+    else
+      cat /dev/null > ${cypherFile}  # start clean since we're not in an editor. 
+    fi
       # execute query w/o input if have input file and doing a -1 option
     while IFS= read -r line; do
       printf '%s\n' "$line" >> ${cypherFile}

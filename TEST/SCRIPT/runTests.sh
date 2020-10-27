@@ -50,9 +50,9 @@ EOV
   saveAllFilePattern="${OUTPUT_FILES_PREFIX}.*(${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})"
   saveQryFilePattern="${OUTPUT_FILES_PREFIX}.*${QRY_FILE_POSTFIX}"
   saveResultsFilePattern="${OUTPUT_FILES_PREFIX}.*${RESULTS_FILE_POSTFIX}"
-  TMP_TEST_FILE=aFile_${RANDOM}.cypher
-  QRY_OUTPUT_FILE="qryResults_${RANDOM}.results"
-  RESULTS_OUTPUT_FILE="resultsTestRun$.out"
+  TMP_TEST_FILE=aFile_${RANDOM}.${QRY_FILE_POSTFIX}
+  QRY_OUTPUT_FILE="qryResults_${RANDOM}.${xRESULTS_FILE_POSTFIX}"
+  RESULTS_OUTPUT_FILE="resultsTestRun.out"
 
   testSuccessQry="WITH 1 AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;"
   testSuccessGrep="grep -c --color=never CYPHER_SUCCESS"
@@ -192,7 +192,7 @@ EOF
       existingFileCnt "${outputFilePattern}"
       if [[ ${_fileCnt} -eq ${expectedNbrFiles} ]]; then
         # clean up output files. not using find regex for portability
-        for rmFile in $(find . -type f -depth 0 | grep --color=never -E "${outputFilePattern}" ) ; do
+        for rmFile in $(find . -type f -depth 1 | grep --color=never -E "${outputFilePattern}" ) ; do
           rm ${rmFile}
         done 
       else # error, did not find the number of expected files
@@ -237,9 +237,7 @@ testsToRun () {
   export NEO4J_USERNAME
   NEO4J_PASSWORD=${pw}
   export NEO4J_PASSWORD
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--saveAll" "${saveAllFilePattern}" 2 "" \
-           "file tests - save cypher query and text results files."
-           
+   
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   exitOnError="Y" # exit if runShell fails
   runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "" "" 0 "" \
