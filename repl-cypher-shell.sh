@@ -103,6 +103,10 @@ dashHelpOutput() {
      but you may have to use the -C | --cypher-shell parameter to tell ${shellName}
      where to find it.
 
+  NOTE: The :use database statement does not persist across queries. Each
+        new query run will execute in the database ${shell_name} was
+        started with unless a :use database statement is part of the query.
+
  OPTIONS
 
   -u | --username <Neo4j database username> 
@@ -113,7 +117,7 @@ dashHelpOutput() {
   
     Database password. Will override NEO4J_USERNAME if set.
 
-  -C | --cypher-shell <path to cypher-shell>
+  -C | --cypher-shell <path to cypher-shell executable>
 
     Used to specify a different cypher-shell than the first one found in the PATH environment
     variable.  Meant to be used with a standalone cypher-shell if not in path, or if the
@@ -355,11 +359,11 @@ THISNEEDSHELP
 
 setDefaults () {
   # pipe input?
- [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"
+  [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"
 
- shellName=${0##*/}  # shell name
+  shellName=${0##*/}  # shell name
 
- db_ver_qry="CALL dbms.components() YIELD name, versions, edition
+  db_ver_qry="CALL dbms.components() YIELD name, versions, edition
   WITH name, versions, edition WHERE name='Neo4j Kernel'
   CALL dbms.showCurrentUser() YIELD username
   RETURN versions, edition, username;"
@@ -381,12 +385,13 @@ setDefaults () {
   RCODE_EMPTY_INPUT=7
   RCODE_MISSING_INPUT_FILE=8
 
-   # Start first exec for vi in append mode.
-  vi_initial_open_opts=' +star '
 
-  edit_cnt=0  # count number of queries run, controls stdin messaging.
-  success_run_cnt=0 # count number of RCODE_SUCCESSful runs for file names, start at 1 since the file names are created before the query is run
-  file_nbr=0
+  vi_initial_open_opts=' +star '  # Start first exec for vi in append mode.
+
+  edit_cnt=0        # count number of queries run, controls stdin messaging.
+  success_run_cnt=0 # count number of RCODE_SUCCESSful runs for file names
+  file_nbr=0        # output file number if query / results file(s) are saved
+  db_name=""        # will only be populated on neo4j 4.x databases
 
    # variables used in file name creation
   SESSION_ID="${RANDOM}" # nbr to id this session. For when keeping intermediate cypher files
@@ -477,7 +482,7 @@ messageOutput() {  # to print or not to print
 
 # one and done cypher-shell options run
 runCypherShellInfoCmd () {
-  messageOutput "Found cypher-shell command argument '${_currentParam}'. Running and exiting. Bye."
+  # messageOutput "Found cypher-shell command argument '${_currentParam}'. Running and exiting. Bye."
   cypher-shell "${1}"
   exitShell ${?}
 }
@@ -748,7 +753,6 @@ getArgs() {
     messageOutput "File '${input_cypher_file}' with cypher query does not exist."
     retCode=${RCODE_MISSING_INPUT_FILE}
   elif [[ ${is_pipe} == "Y" ]]; then
-    have_error="N"
     if [[ ${external_editor} -gt 0 ]]; then  # could do this, but why?
       messageOutput "Cannot use external editor and pipe input at the same time."
       retCode=${RCODE_INVALID_CMD_LINE_OPTS}
@@ -832,13 +836,13 @@ haveCypherShell () {
   # ck to see if you can connect to cypher-shell w/o error
   if [[ -z ${use_this_cypher_shell} ]]; then
     if ! which cypher-shell > /dev/null; then
-      messageOutput "*** Error: cypher-shell not found.  Bye."
+      messageOutput "*** Error: cypher-shell not found. Bye."
       exitShell ${RCODE_CYPHER_SHELL_NOT_FOUND}
     else
       use_this_cypher_shell="$(which cypher-shell)"
     fi
-  elif [ ! -x "${use_this_cypher_shell}" ]; then
-    messageOutput "*** Error: --cypher-shell ${use_this_cypher_shell} parameter value for full path to cypher-shell not found or is not executable.  Bye."
+  elif [[ ! -x ${use_this_cypher_shell} || ! -f ${use_this_cypher_shell} ]]; then
+    messageOutput "*** Error: --cypher-shell ${use_this_cypher_shell} parameter not found or is not executable. Bye."
     exitShell ${RCODE_CYPHER_SHELL_NOT_FOUND}
   fi
 }
@@ -872,6 +876,19 @@ getCypherShellLogin () {
     fi
   fi
 }
+  
+get4xDbName () {
+  if [[ ${db_version} == *$'4.'* ]]; then
+    echo "${db_40_db_name_qry}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
+    runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
+    msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
+    db_name="Database: ${msg_arr[@]:0:1}"
+    cleanupConnectFiles
+  else
+    db_name=""
+  fi
+
+}
 
 verifyCypherShell () {
   # connect to cypher-shell and get details
@@ -880,35 +897,13 @@ verifyCypherShell () {
   getCypherShellLogin # get cypher-shell login credentials if needed
   echo "${db_ver_qry}" > ${TMP_DB_CONN_QRY_FILE}    # get database version query
   runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"
-  #eval "${use_this_cypher_shell} ${cypher_shell_cmd_line} ${user_name} ${user_password} ${cypherShellArgs} --format plain < ${TMP_DB_CONN_QRY_FILE} > ${TMP_DB_CONN_RES_FILE} 2>&1"
 
   if [[ ${quiet_output} == "N" && ${is_pipe} == "N" ]]; then
     msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
     db_version=${msg_arr[@]:0:1}
     db_edition=${msg_arr[@]:1:1}
     db_username=${msg_arr[@]:2:1}
-   
-    #  v 4, db.info gives you current database name
-    # db.info ->  "neo4j" "2020-08-03T16:54:43.627Z"
-    # dbms.components -> "Neo4j Kernel" ["4.1.1"] "community"
-    #  v 3
-    # db.components ->  ["3.5.20"]  "communiqryFileCnt as user %s" ${db_edition} ${db_version} ${db_username}
-    printf -v msg "Using Neo4j %s version %s as user %s" "${db_edition}" "${db_version}" "${db_username}"
-    if [[ ${db_version} == *$'4.'* ]]; then
-
-      echo "${db_40_db_name_qry}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
-    
-      # eval "${use_this_cypher_shell} ${cypher_shell_cmd_line} ${user_name} ${user_password} ${cypherShellArgs} --format plain > ${TMP_DB_CONN_RES_FILE} 2>&1"
-      runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
-      msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
-      db_name=${msg_arr[@]:0:1}
-      msg="${msg} in database ${db_name}"
-      messageOutput "${msg}"
-    fi
-
-    if [[ ${external_editor} -eq 1 ]]; then
-      printContinueOrExit "Using ${editor_to_use} as editor."
-    fi
+    messageOutput "Using Neo4j ${db_edition} version ${db_version} as user ${db_username}" 
   fi
   cleanupConnectFiles
 }
@@ -1019,7 +1014,7 @@ getCypherText () {
     return
   elif [[ ${external_editor} -eq 0 ]]; then # using stdin
     if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
-      messageOutput "==> USE Ctl-D on a blank line to terminate stdin and execute cypher statement. ${edit_cnt} edits in this session"
+      messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${db_name}"
       messageOutput "        Ctl-C to terminate stdin and exit ${shellName} without running cypher statement."
     fi
       
@@ -1080,7 +1075,7 @@ executionLoop () {
       if [[ ${exit_on_error} == "Y" || ${is_pipe} == "Y" ]]; then # print error and exit
         exitShell ${cypherRetCode}
       elif [[ ${cypherRetCode} != ${RCODE_EMPTY_INPUT} ]]; then # error message can be long, esp multi-stmt. send through pager
-        printContinueOrExit
+        printContinueOrExit "Cypher Error."
       fi
     fi
     if [[ ${run_once} == "Y" || ${is_pipe} == "Y" ]]; then # exit shell if run 1, or is from a pipe
@@ -1100,6 +1095,7 @@ setDefaults
 getArgs "$@"
 haveCypherShell
 verifyCypherShell   # verify that can connect to cypher-shell
+get4xDbName         # get database name if using 4.x
 executionLoop       # execute cypher statements
-exitShell 0
+exitShell ${RCODE_SUCCESS}
 
