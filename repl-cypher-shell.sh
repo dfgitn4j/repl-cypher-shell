@@ -1074,8 +1074,8 @@ executionLoop () {
     else # ERROR running cypher code
       if [[ ${exit_on_error} == "Y" || ${is_pipe} == "Y" ]]; then # print error and exit
         exitShell ${cypherRetCode}
-      elif [[ ${cypherRetCode} != ${RCODE_EMPTY_INPUT} ]]; then # error message can be long, esp multi-stmt. send through pager
-        printContinueOrExit "Cypher Error."
+      # elif [[ ${cypherRetCode} != ${RCODE_EMPTY_INPUT} ]]; then # error message can be long, esp multi-stmt. send through pager
+      #  printContinueOrExit "Cypher Error."
       fi
     fi
     if [[ ${run_once} == "Y" || ${is_pipe} == "Y" ]]; then # exit shell if run 1, or is from a pipe
