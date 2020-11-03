@@ -1,4 +1,4 @@
-repl-cypher-shell.sh
+repl-cypher-shell.sh --time --saveAll
 
 // Terminus package is used for output
  // send selected text to terminal and run key sequence is mapped

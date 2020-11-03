@@ -51,7 +51,7 @@ EOV
   saveQryFilePattern="${OUTPUT_FILES_PREFIX}.*${QRY_FILE_POSTFIX}"
   saveResultsFilePattern="${OUTPUT_FILES_PREFIX}.*${RESULTS_FILE_POSTFIX}"
   TMP_TEST_FILE=aFile_${RANDOM}${QRY_FILE_POSTFIX}
-  QRY_OUTPUT_FILE="qryResults_${RANDOM}.qryOutput"
+  QRY_OUTPUT_FILE="qryResults_${RANDOM}.tmpQryOutputFile"
   RESULTS_OUTPUT_FILE="resultsTestRun.out"
 
   testSuccessQry="WITH 1 AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;"
@@ -167,8 +167,8 @@ runShell () {
 
   if [[ $# -lt 7 ]] ; then
     paramErrorExit "Exiting. Invalid # params to ${0}. Sent:\n(${@})\n Need at least 7, got: $#. Bye.\n"
-  elif [[ -z "${outputFilePattern}" && -n "${grepFileContentCmd}" ]]; then 
-    paramErrorExit "${outputFilePattern} needs to exist if ${grepFileContentCmd} exists."
+  #elif [[ -z "${outputFilePattern}" && -n "${grepFileContentCmd}" ]]; then 
+  #  paramErrorExit "${outputFilePattern} needs to exist if ${grepFileContentCmd} exists."
   fi
 
   secondErrorMsg="" # error not triggered by an invalid return code
@@ -194,6 +194,7 @@ EOF
     exit 1
   fi 
 
+  rm ${QRY_OUTPUT_FILE} # remove transient transient output file
   updateSuccessCnt="N"
   if [[ ${exitCode} -ne ${expectedExitCode} ]]; then
     printf -v secondErrorMsg "%s" "Expected exit code = ${expectedExitCode}, got ${exitCode}"
@@ -204,7 +205,7 @@ EOF
     else
       updateSuccessCnt="Y"
     fi
-  elif [[ -n "${outputFilePattern}" ]]; then # file existence and file content existence tests
+  elif [[ -n ${outputFilePattern} ]]; then # file existence and file content existence tests
       # fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" | wc -l ) 
     existingFileCnt "${outputFilePattern}"
     if [[ ${_fileCnt} -ne ${expectedNbrFiles} ]]; then
@@ -220,7 +221,7 @@ EOF
     updateSuccessCnt="Y"
   fi
 
-  if [[ "${updateSuccessCnt}" == "Y" ]]; then # clean-up files
+  if [[ "${updateSuccessCnt}" == "Y" && -n ${outputFilePattern} ]]; then  # clean up files
     for rmFile in $(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" ) ; do
       rm ${rmFile}
     done 
@@ -255,6 +256,19 @@ testsToRun () {
   NEO4J_PASSWORD=${pw}
   export NEO4J_PASSWORD
 
+# runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "${testFailQry}" "--saveResults" "${saveResultsFilePattern}" 1 "" \
+#            "file tests - bad query input save results file that will not exist."
+# read n
+#   runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "${testFailQry}" "--saveResults" "${saveResultsFilePattern}" 1 "" \
+#            "file tests - bad query input save results file that will not exist."
+# read n
+#   runShell ${RCODE_EMPTY_INPUT} "STDIN" "" "--saveResults" "${saveResultsFilePattern}" 0 "" \
+#            "file tests - empty input query input save results file that will not exist."
+# read n
+#   runShell ${RCODE_EMPTY_INPUT} "PIPE" "" "--saveResults" "${saveResultsFilePattern}" 0 "" \
+#            "file tests - empty input query input save results file that will not exist."
+# exit
+
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   exitOnError="Y" # exit if runShell fails
 
@@ -288,9 +302,9 @@ testsToRun () {
            "invalid param test - incompatible editor argument and pipe input"
 
   touch ${TMP_TEST_FILE}
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--file ${TMP_TEST_FILE}" "" 0 "" \
+  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--file ${TMP_TEST_FILE}" "${QRY_OUTPUT_FILE}" 0 "" \
            "invalid param test - incompatible file input and pipe input."
-  # rm ${TMP_TEST_FILE}
+  rm ${TMP_TEST_FILE}
 
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--exitOnError nogood" "" 0 "" \
            "invalid param test - flag argument only, no option expected."
