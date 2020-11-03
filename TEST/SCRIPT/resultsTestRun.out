@@ -1,0 +1,1 @@
+PASS	1	1	STDIN	RCODE_CYPHER_SHELL_ERROR	RCODE_CYPHER_SHELL_ERROR	'--address n0h0st'	''	'invalid param test - bad pass-thru argument to cypher-shell.'	
