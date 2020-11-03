@@ -1,4 +1,6 @@
-## Tests1
+## Testing 
+
+- mostly through script
 
 **SCRIPT**
 
