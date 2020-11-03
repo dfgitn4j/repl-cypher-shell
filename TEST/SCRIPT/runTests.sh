@@ -35,7 +35,7 @@ EOV
   successMsg="PASS"
   errorMsg="FAIL"
 
-   # RESULTS_OUTPUT_FILE="resultsTestRun-$(date '+%Y-%m-%d_%H:%M:%S')".txt
+  # RESULTS_OUTPUT_FILE="resultsTestRun-$(date '+%Y-%m-%d_%H:%M:%S')".txt
  
   # some failure tests work on matching the saveAllFilePattern. Temp files 
   # cannot use those postfix's
@@ -50,8 +50,8 @@ EOV
   saveAllFilePattern="${OUTPUT_FILES_PREFIX}.*(${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})"
   saveQryFilePattern="${OUTPUT_FILES_PREFIX}.*${QRY_FILE_POSTFIX}"
   saveResultsFilePattern="${OUTPUT_FILES_PREFIX}.*${RESULTS_FILE_POSTFIX}"
-  TMP_TEST_FILE=aFile_${RANDOM}.${QRY_FILE_POSTFIX}
-  QRY_OUTPUT_FILE="qryResults_${RANDOM}.${xRESULTS_FILE_POSTFIX}"
+  TMP_TEST_FILE=aFile_${RANDOM}${QRY_FILE_POSTFIX}
+  QRY_OUTPUT_FILE="qryResults_${RANDOM}.qryOutput"
   RESULTS_OUTPUT_FILE="resultsTestRun.out"
 
   testSuccessQry="WITH 1 AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;"
@@ -70,8 +70,25 @@ EOV
   exitOnError="N" # set to Y to stop if any runShell tests fail.
 }
 
+# ckForLeftoverOutputFiles () {
+#   existingFileCnt "${QRY_OUTPUT_FILE}" # should be no files. error if there is
+#   if [[ ${_fileCnt} -ne 0 ]]; then
+#     printf "%s\n\n" "Please clean up previous output files. Tests can fail when they shouldn't if left in place."
+#     find * -type f -depth 0 | grep --color=never -E "${saveAllFilePattern}"
+#     printf "%s\n\n" "Bye."
+#     exit
+#   fi
+# }
 exitShell () {
+
   rm -f ${QRY_OUTPUT_FILE}
+
+  existingFileCnt "${saveAllFilePattern}" # should be no files. error if there is
+  if [[ ${_fileCnt} -ne 0 ]]; then
+    printf "%s\n\n" "Please clean up ${_fileCnt} previous output files. Tests can fail when they shouldn't if left in place."
+    find * -type f -depth 0 | grep  -E "${1}" 
+    printf "%s\n\n" "Bye."
+  fi
   exit ${1}
 }
 
@@ -97,15 +114,7 @@ existingFileCnt () {
   _fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${1}" | wc -l ) 
 }
 
-# ckForLeftoverOutputFiles () {
-#   existingFileCnt "${QRY_OUTPUT_FILE}" # should be no files. error if there is
-#   if [[ ${_fileCnt} -ne 0 ]]; then
-#     printf "%s\n\n" "Please clean up previous output files. Tests can fail when they shouldn't if left in place."
-#     find * -type f -depth 0 | grep --color=never -E "${saveAllFilePattern}"
-#     printf "%s\n\n" "Bye."
-#     exit
-#   fi
-# }
+
 # output for screen and results file
 printOutput () {
 
@@ -116,6 +125,13 @@ printOutput () {
          ${errVarNames[@]:${exitCode}:1} ${errVarNames[@]:${expectedExitCode}:1}  \
          ${usePipe} "'${callingParams}'" "'${secondErrorMsg}'" "'${desc}'" >> ${RESULTS_OUTPUT_FILE}
 
+}
+
+paramErrorExit () {
+  msg="${1}"
+  printf "Parameters:\n"
+  while (( "$#" )); do printf " '$1'\n"; shift; done 
+  exit 1
 }
 
 # runShell ()
@@ -139,12 +155,7 @@ printOutput () {
 #         ${grepFileContentCmd} to validate content in ${QRY_OUTPUT_FILE}
 #  4c.   If no error, ${updateSuccessCnt} == Y, increment ${successCnt}, else increment ${errorCnt}
 runShell () {
-  if [[ $# -lt 7 ]] ; then
-    printf "Exiting. Invalid # params to ${0}. Sent:\n(${@})\n Need at least 7, got: $#. Bye.\n"
-    printf "Parameters:\n"
-    while (( "$#" )); do printf " '$1'\n"; shift; done 
-    exit 1
-  fi
+
   expectedExitCode=${1}
   testType=${2}
   testQry="${3}"
@@ -153,6 +164,13 @@ runShell () {
   expectedNbrFiles=${6}
   grepFileContentCmd="${7}"
   desc="${8:-not provided}"
+
+  if [[ $# -lt 7 ]] ; then
+    paramErrorExit "Exiting. Invalid # params to ${0}. Sent:\n(${@})\n Need at least 7, got: $#. Bye.\n"
+  elif [[ -z "${outputFilePattern}" && -n "${grepFileContentCmd}" ]]; then 
+    paramErrorExit "${outputFilePattern} needs to exist if ${grepFileContentCmd} exists."
+  fi
+
   secondErrorMsg="" # error not triggered by an invalid return code
   updateSuccessCnt="Y" # assume we're going to have successfull tests
 
@@ -176,37 +194,36 @@ EOF
     exit 1
   fi 
 
-   # test results
-   if [[ ${exitCode} -ne ${expectedExitCode} ]]; then
-    updateSuccessCnt="N"
+  updateSuccessCnt="N"
+  if [[ ${exitCode} -ne ${expectedExitCode} ]]; then
     printf -v secondErrorMsg "%s" "Expected exit code = ${expectedExitCode}, got ${exitCode}"
-  elif [[ -z ${outputFilePattern} && -z ${grepFileContentCmd} ]]; then # no output files expected.
+  elif [[ -z ${outputFilePattern} ]]; then # no output files expected.
     existingFileCnt "${saveAllFilePattern}" # should be no files. error if there is
     if [[ ${_fileCnt} -ne 0 ]]; then
-      updateSuccessCnt="N"
       secondErrorMsg="Output files from shell exist that should not be there."
+    else
+      updateSuccessCnt="Y"
     fi
-  else # file existence and file content existence tests
-    if [[ ! -z ${outputFilePattern} ]]; then # file existence checks and count tests
+  elif [[ -n "${outputFilePattern}" ]]; then # file existence and file content existence tests
       # fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" | wc -l ) 
-      existingFileCnt "${outputFilePattern}"
-      if [[ ${_fileCnt} -eq ${expectedNbrFiles} ]]; then
+    existingFileCnt "${outputFilePattern}"
+    if [[ ${_fileCnt} -ne ${expectedNbrFiles} ]]; then
+        printf -v secondErrorMsg "%s" "Expected ${expectedNbrFiles} output files, got ${_fileCnt}"
         # clean up output files. not using find regex for portability
-        for rmFile in $(find . -type f -depth 1 | grep --color=never -E "${outputFilePattern}" ) ; do
-          rm ${rmFile}
-        done 
-      else # error, did not find the number of expected files
-        updateSuccessCnt="N"
-        printf -v secondErrorMsg "%s" "Expected ${_fileCnt} output files, got ${expectedNbrFiles}"
-      fi
-    fi # validate existence and number of files
-
-    if [[ ! -z ${grepFileContentCmd} && ${updateSuccessCnt} == "Y" ]]; then # have file, validate text in output. 
-      if [[ $(eval "${grepFileContentCmd} ${QRY_OUTPUT_FILE}") -eq 0 ]]; then # output of grep cmd should be > 0
-        updateSuccessCnt="N"
-        printf -v secondErrorMsg "%s" "grep command '${grepFileContentCmd}' on output file: ${QRY_OUTPUT_FILE} failed."
-      fi
+    elif [[ ! -z ${grepFileContentCmd} ]] && \
+         [[ $(eval "${grepFileContentCmd} ${QRY_OUTPUT_FILE}") -eq 0 ]]; then # output of grep cmd should be > 0
+      printf -v secondErrorMsg "%s" "grep command '${grepFileContentCmd}' on output file: ${QRY_OUTPUT_FILE} failed."
+    else
+      updateSuccessCnt="Y"
     fi
+  else
+    updateSuccessCnt="Y"
+  fi
+
+  if [[ "${updateSuccessCnt}" == "Y" ]]; then # clean-up files
+    for rmFile in $(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" ) ; do
+      rm ${rmFile}
+    done 
   fi
 
    # set status message and update counts
@@ -237,13 +254,15 @@ testsToRun () {
   export NEO4J_USERNAME
   NEO4J_PASSWORD=${pw}
   export NEO4J_PASSWORD
-   
+
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   exitOnError="Y" # exit if runShell fails
+
   runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "" "" 0 "" \
-           "uid/pw tests - using NEO4J_[USERNAME PASSWORD] environment variables."
-  exitOnError="N" # continue if runShell fails
+           "tesing connection - using NEO4J_[USERNAME PASSWORD] environment variables."
+  # exitOnError="N" # continue if runShell fails
   
+
   # INVALID PARAMETER TESTS 
   # none of these test should ever get to executing a query
   printf "\n*** Invalid paramater tests ***\n"  
@@ -271,7 +290,7 @@ testsToRun () {
   touch ${TMP_TEST_FILE}
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--file ${TMP_TEST_FILE}" "" 0 "" \
            "invalid param test - incompatible file input and pipe input."
-  rm ${TMP_TEST_FILE}
+  # rm ${TMP_TEST_FILE}
 
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--exitOnError nogood" "" 0 "" \
            "invalid param test - flag argument only, no option expected."
