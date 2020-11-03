@@ -401,6 +401,7 @@ setDefaults () {
   TMP_FILE="tmpEditorCypherFile.${SESSION_ID}"
   TMP_DB_CONN_QRY_FILE="tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
   TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
+  TIME_OUTPUT_HEADER="Query started:"
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
 }
 
@@ -487,50 +488,50 @@ runCypherShellInfoCmd () {
   exitShell ${?}
 }
 
- # getOptArgs - gets 0 or more flag options, sets a var with the vals in _retOpts for a flag until next
- #  flag, and sets _shiftCnt as the number of options found to shift the source array
+ # getOptArgs - gets 0 or more flag options, sets a var with the vals in arg_ret_opts for a flag until next
+ #  flag, and sets arg_shift_cnt as the number of options found to shift the source array
  #  and does error cking.
  #    1st param = expected number of parameters, -1 = no limit (i.e. -f abc 1 dca -a will return abc 1 dca)
  #    2nd param = error message
  #    3rd param = options passed in
  #
  #  i.e called with getOptArgs -1 "my error" "-f abc 1 dec -a" will set:
- #      _retOpts="abc 1 dec"
- #      _shiftCnt=3
- # calling function then needs to shift it's input array by _shiftCnt
+ #      arg_ret_opts="abc 1 dec"
+ #      arg_shift_cnt=3
+ # calling function then needs to shift it's input array by arg_shift_cnt
 getOptArgs() {
 
-  _retOpts=""  # init no options found
-  _nbrExpectedOpts="${1}"  # nbr options expected
+  arg_ret_opts=""  # init no options found
+  arg_nbr_expected_opts="${1}"  # nbr options expected
   shift
   _currentParam=${1}
   shift  # $@ should now have remaing opts, if any
-  _shiftCnt=1
+  arg_shift_cnt=1
 
-  if [[ ${_nbrExpectedOpts} == 0 ]]; then
+  if [[ ${arg_nbr_expected_opts} == 0 ]]; then
     if [[ ${1} != -* ]] && [[ ${1} ]]; then
       messageOutput  "No option expected for ${_currentParam}. Bye."
       exitShell ${RCODE_INVALID_CMD_LINE_OPTS}
     fi
-  elif [[ ${_nbrExpectedOpts} -eq 1 ]]; then
+  elif [[ ${arg_nbr_expected_opts} -eq 1 ]]; then
     if [[ ${1} == -* ]] || [[ ! ${1} ]] ; then
       messageOutput "Missing options for: ${_currentParam}. Bye."
       exitShell ${RCODE_INVALID_CMD_LINE_OPTS}
     else # valid one param option
-      _retOpts="${1}"
-      (( _shiftCnt++ )) # shift over flag and single parameter
+      arg_ret_opts="${1}"
+      (( arg_shift_cnt++ )) # shift over flag and single parameter
     fi
   else # undefined pattern, 0 or unlimited options until next flag
     if [[ ${1} == -*  || ! ${1} ]]; then # flag only, e.g. --whyme
-      _retOpts="${1}"
+      arg_ret_opts="${1}"
     else # multi param
       while [[ ${1} != -*  &&  ${1} ]] ; do
-        _retOpts="${_retOpts}${1}"
-        if [[ ${_nbrExpectedOpts} -ne -1 ]] && [[ ${_shiftCnt} -gt  ${_nbrExpectedOpts} ]]; then
+        arg_ret_opts="${arg_ret_opts}${1}"
+        if [[ ${arg_nbr_expected_opts} -ne -1 ]] && [[ ${arg_shift_cnt} -gt  ${arg_nbr_expected_opts} ]]; then
           messageOutput "Wrong options for ${_currentParam}. Bye."
           exitShell ${RCODE_INVALID_CMD_LINE_OPTS}
         fi
-        (( _shiftCnt++ ))
+        (( arg_shift_cnt++ ))
         shift
       done
     fi
@@ -577,47 +578,47 @@ getArgs() {
        # string parameters vals are in in double quotes: --param 'id => "Z4485661"'
       -u | --username ) # username to connect as.
          getOptArgs 1  "$@"
-         user_name="${_currentParam} ${_retOpts}"
+         user_name="${_currentParam} ${arg_ret_opts}"
          coll_args="${coll_args} ${user_name}"
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -p | --password ) # username to connect as.
          getOptArgs 1  "$@"
-         user_password="${_currentParam} ${_retOpts}"
+         user_password="${_currentParam} ${arg_ret_opts}"
          coll_args="${coll_args} ${user_password}"
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -C | --cypher-shell ) # username to connect as.
          getOptArgs 1  "$@"
-         use_this_cypher_shell="${_retOpts}"
+         use_this_cypher_shell="${arg_ret_opts}"
          coll_args="${coll_args} ${use_this_cypher_shell}"
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -P | --param)
          getOptArgs 1  "$@"
-         use_params="${use_params} ${_currentParam} '${_retOpts}'"
+         use_params="${use_params} ${_currentParam} '${arg_ret_opts}'"
          coll_args="${coll_args} ${use_params}"
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -f | --file ) # cypher file name
          getOptArgs 1 "$@"
-         input_cypher_file="${_currentParam} ${_retOpts}"
+         input_cypher_file="${_currentParam} ${arg_ret_opts}"
          input_cypher_file_name="$(echo "${input_cypher_file}" | sed -E -e 's/(--file|-f)[[:space:]]*//')"
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          coll_args="${coll_args} ${input_cypher_file}"
          ;;
       --format)
          getOptArgs 1 "$@"
          # note the extra space at end of cypher_format_arg makes validation testing below easier
-         cypher_format_arg="${_currentParam} ${_retOpts} "
-         shift "${_shiftCnt}" # go past number of params processed
+         cypher_format_arg="${_currentParam} ${arg_ret_opts} "
+         shift "${arg_shift_cnt}" # go past number of params processed
          coll_args="${coll_args} ${cypher_format_arg}"
          ;;
         # one and done cyphe-shell command line options
       -v | --version | --driver-version) # keep cypher queries and output results files.
          getOptArgs 0 "$@"
          cypherShellInfoArg=${_currentParam}
-         shift "${_shiftCnt}"
+         shift "${arg_shift_cnt}"
          ;;
         # begin shell specific options
         # save optoins
@@ -625,19 +626,19 @@ getArgs() {
          getOptArgs 0 "$@"
          save_all="Y"
          coll_args="${coll_args} ${_currentParam}"
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -S | --saveCypher) # keep the cypher queries around for future use.
          getOptArgs 0 "$@"
          save_cypher="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -R | --saveResults) # keep the cypher queries around for future use.
          getOptArgs 0 "$@"
          save_results="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
         # editor options
       -V | --vi)
@@ -645,21 +646,21 @@ getArgs() {
          (( external_editor++ ))
          editor_to_use="vi" 
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       --nano)
          getOptArgs 0 "$@"
          (( external_editor++ ))
          editor_to_use="nano -t" 
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -E | --editor)
          getOptArgs -1  "$@"
          (( external_editor++ ))
-         editor_to_use="${_retOpts}"
+         editor_to_use="${arg_ret_opts}"
          coll_args="${coll_args} ${_currentParam}"
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
           # run options
           # override default less options
@@ -667,46 +668,46 @@ getArgs() {
           # with a backslash e.g. -L '\-\-line-numbers'
       -L | --lessOpts )
          getOptArgs -1 "$@"
-         less_options="${_retOpts}"
-         less_options=$(echo ${_retOpts} | sed -e 's/\\//g') # remove '\' from '\-'
-         coll_args="${coll_args} ${_currentParam} ${_retOpts}"
-         shift "${_shiftCnt}" # go past number of params processed
+         less_options="${arg_ret_opts}"
+         less_options=$(echo ${arg_ret_opts} | sed -e 's/\\//g') # remove '\' from '\-'
+         coll_args="${coll_args} ${_currentParam} ${arg_ret_opts}"
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -c | --showCmdLn ) # show command line args in output
          getOptArgs 0 "$@"
          show_cmd_line="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -t | --time) # print time query started
          getOptArgs 0 "$@"
          qry_start_time="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -q | --quiet ) # minimal output
          getOptArgs 0 "$@"
          quiet_output="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -1 | --one) # run query execution loop only once
          getOptArgs 0 "$@"
          run_once="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -N | --noLogin) # flag to say don't need login prompt
          getOptArgs 0 "$@"
          no_login_needed="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -X | --exitOnError )
          getOptArgs 0 "$@"
          exit_on_error="Y"
          coll_args="${coll_args} ${_currentParam} "
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -h | --help)
          dashHelpOutput
@@ -723,9 +724,9 @@ getArgs() {
          ;;
       *)
          getOptArgs -1 "$@"
-         cypherShellArgs="${cypherShellArgs} ${_currentParam} ${_retOpts}"
+         cypherShellArgs="${cypherShellArgs} ${_currentParam} ${arg_ret_opts}"
          #cypherShellArgs="${cypherShellArgs} ${_currentParam}"
-         shift "${_shiftCnt}" # go past number of params processed
+         shift "${arg_shift_cnt}" # go past number of params processed
          coll_args="${coll_args} ${cypherShellArgs}"
          ;;
      esac
@@ -739,36 +740,36 @@ getArgs() {
     runCypherShellInfoCmd "${cypherShellInfoArg}" # run info cmd and exit
   fi
    # parameter checks.  well, kinda
-  retCode=${RCODE_SUCCESS} 
+  return_code=${RCODE_SUCCESS} 
   if ! echo "${cypher_format_arg}" | grep -q -E ' auto | verbose | plain '; then
     messageOutput "Invalid --format option: '${cypher_format_arg}'."
-    retCode=${RCODE_INVALID_FORMAT_STR}
+    return_code=${RCODE_INVALID_FORMAT_STR}
   elif [[ ${external_editor} -gt 1 ]]; then
     messageOutput "Invalid command line options.  Cannot use vi and another editor at the same time."
-    retCode=${RCODE_INVALID_CMD_LINE_OPTS}
+    return_code=${RCODE_INVALID_CMD_LINE_OPTS}
   elif [[ ${external_editor} -eq 1 && ${run_once} == "Y" ]]; then
     messageOutput "Invalid command line options.  Cannot use an editor and run once at the same time."
-    retCode=${RCODE_INVALID_CMD_LINE_OPTS}
+    return_code=${RCODE_INVALID_CMD_LINE_OPTS}
   elif [[ -n ${input_cypher_file_name} && ! -f ${input_cypher_file_name} ]]; then # missing input file
     messageOutput "File '${input_cypher_file}' with cypher query does not exist."
-    retCode=${RCODE_MISSING_INPUT_FILE}
+    return_code=${RCODE_MISSING_INPUT_FILE}
   elif [[ ${is_pipe} == "Y" ]]; then
     if [[ ${external_editor} -gt 0 ]]; then  # could do this, but why?
       messageOutput "Cannot use external editor and pipe input at the same time."
-      retCode=${RCODE_INVALID_CMD_LINE_OPTS}
+      return_code=${RCODE_INVALID_CMD_LINE_OPTS}
     elif [[ -n ${input_cypher_file} ]]; then
       messageOutput "Cannot use input file and pipe input at the same time."
-      retCode=${RCODE_INVALID_CMD_LINE_OPTS}
+      return_code=${RCODE_INVALID_CMD_LINE_OPTS}
     fi
-    if [[ ${retCode} -ne 0 ]]; then
+    if [[ ${return_code} -ne 0 ]]; then
       exec <&-  # close stdin
     fi
   fi
 
-  if [[ ${retCode} -ne 0 ]]; then
+  if [[ ${return_code} -ne 0 ]]; then
     messageOutput "Command line parameters passed: ${coll_args}"
     messageOutput "Good Bye."
-    exitShell ${retCode}
+    exitShell ${return_code}
   fi
 
   if [[ ${show_cmd_line} == "Y" ]]; then # output command line args
@@ -789,19 +790,24 @@ cleanupConnectFiles() {
 exitCleanUp() {
   if [[ ${save_cypher} == "Y" || ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
 
-     # current edit produced $QRY_FILE_POSTFIX file may be empty
+     # current edit produced $QRY_FILE_POSTFIX file may be empty on ctl-c
     find . -maxdepth 1 -type f -empty -name "${cypherFile}"  -exec rm {} \;
 
     messageOutput " "
-    if [[ $(( success_run_cnt )) -ne 0 ]]; then
+    
+ # always one number ahead if queries have been run
+        (( file_nbr-- ))
+
       if [[ ${save_all} == "Y" ]]; then
         messageOutput "**** Don't forget about the saved $(( file_nbr*2 )) (${QRY_FILE_POSTFIX}) query results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
       elif [[ ${save_results} == "Y" ]]; then
+        find . -maxdepth 1 -type f -name "${cypherFile}"  -exec rm {} \;  # delete query file
         messageOutput "**** Don't forget about the saved ${file_nbr} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
       elif [[ ${save_cypher} == "Y" ]]; then
         messageOutput "**** Don't forget about the saved ${file_nbr} query files (${QRY_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+        find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
       fi
-    fi
+
   else # cleanup any file from this session 
     find . -maxdepth 1 -type f -name "${cypherFile}"  -exec rm {} \;
     find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
@@ -820,14 +826,14 @@ exitCleanUp() {
 exitShell() {
   if [ "${1}" -ne "${1}" ] 2>/dev/null; then # not an integer, then internal error
     messageOutput "INTERNAL ERRrOR.  Sorry about that.  ${1}"
-    retCode=-1
+    return_code=-1
   elif [[ -z ${1} ]]; then # Ctl-C sent
-    retCode=${RCODE_SUCCESS}
+    return_code=${RCODE_SUCCESS}
   else
-    retCode=${1}
+    return_code=${1}
   fi
   exitCleanUp
-  exit "${retCode}"
+  exit "${return_code}"
 
 }
 
@@ -959,7 +965,7 @@ cleanAndRunCypher () {
             '${use_this_cypher_shell}' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
     else 
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
-            [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
+            [[ ${qry_start_time} == "Y" ]] && printf '// %s %s\n' "${TIME_OUTPUT_HEADER}" \""$(date)"\";  \
             '${use_this_cypher_shell}' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less 
     fi
 
@@ -988,14 +994,14 @@ intermediateFileHandling () {
     if [[ ${external_editor} -eq 1 ]]; then # use previous file if using editor
       cp ${cur_cypher_qry_file} ${cypherFile}
     fi
-    if [[ ${save_all} == "Y" || ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then
+    if [[  ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then
       if [[ ${save_cypher} == "N" ]]; then
         rm -f ${cur_cypher_qry_file}
       fi
       if [[ ${save_results} == "N" ]]; then
         rm -f ${resultsFile}  
       fi
-    else # saving nothing
+    elif [[ ${save_all} == "N" ]]; then # saving nothing
       find . -maxdepth 1 -type f -name "${cur_cypher_qry_file}"  -exec rm {} \;
       find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
     fi
@@ -1071,12 +1077,8 @@ executionLoop () {
       if [[ ${external_editor} -eq 1 ]]; then # don't go straight back into editor
         printContinueOrExit "Using editor."
       fi
-    else # ERROR running cypher code
-      if [[ ${exit_on_error} == "Y" || ${is_pipe} == "Y" ]]; then # print error and exit
-        exitShell ${cypherRetCode}
-      # elif [[ ${cypherRetCode} != ${RCODE_EMPTY_INPUT} ]]; then # error message can be long, esp multi-stmt. send through pager
-      #  printContinueOrExit "Cypher Error."
-      fi
+    elif [[ ${exit_on_error} == "Y" ]]; then # print error and exit
+      exitShell ${cypherRetCode} # ERROR running cypher code
     fi
     if [[ ${run_once} == "Y" || ${is_pipe} == "Y" ]]; then # exit shell if run 1, or is from a pipe
       exitShell ${cypherRetCode}
