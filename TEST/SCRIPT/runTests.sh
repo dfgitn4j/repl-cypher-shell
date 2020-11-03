@@ -256,18 +256,6 @@ testsToRun () {
   NEO4J_PASSWORD=${pw}
   export NEO4J_PASSWORD
 
-# runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "${testFailQry}" "--saveResults" "${saveResultsFilePattern}" 1 "" \
-#            "file tests - bad query input save results file that will not exist."
-# read n
-#   runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "${testFailQry}" "--saveResults" "${saveResultsFilePattern}" 1 "" \
-#            "file tests - bad query input save results file that will not exist."
-# read n
-#   runShell ${RCODE_EMPTY_INPUT} "STDIN" "" "--saveResults" "${saveResultsFilePattern}" 0 "" \
-#            "file tests - empty input query input save results file that will not exist."
-# read n
-#   runShell ${RCODE_EMPTY_INPUT} "PIPE" "" "--saveResults" "${saveResultsFilePattern}" 0 "" \
-#            "file tests - empty input query input save results file that will not exist."
-# exit
 
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   exitOnError="Y" # exit if runShell fails
@@ -277,8 +265,7 @@ testsToRun () {
   # exitOnError="N" # continue if runShell fails
   
 
-  # INVALID PARAMETER TESTS 
-  # none of these test should ever get to executing a query
+  # INVALID PARAMETER TESTS -  none of these test should ever get to executing a query
   printf "\n*** Invalid paramater tests ***\n"  
   runShell ${RCODE_INVALID_CMD_LINE_OPTS} "STDIN" "" "--param" "" 0 "" \
            "invalid param test - missing parameter argument value."
