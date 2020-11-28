@@ -9,6 +9,8 @@
 setopt SH_WORD_SPLIT >/dev/null 2>&1
 set -o pipefail
 
+shell_name=${0##*/}  # shell name must be set here to avoid zsh / bash diffs
+
 usage() {
 
   if [[ ${quiet_output} == "N" ]]; then # usage can be called when error occurs
@@ -16,13 +18,13 @@ usage() {
 
  NAME
 
-  ${shellName}
+  ${shell_name}
    - Frontend to cypher-shell with REPL flavor on command line, in a text editor embedded
      terminal (e.g. Sublime Text, atom, VSCode, IntelliJ), with output sent through a pager. 
 
  SYNOPSIS
 
-  ${shellName}
+  ${shell_name}
 
     [-u | --username]        cypher-shell username parameter.
     [-p | --password]        cypher-shell password parameter.
@@ -67,7 +69,7 @@ dashHelpOutput() {
 
  DESCRIPTION
 
-  ${shellName} is a front-end wrapper to cypher-shell that executes cypher
+  ${shell_name} is a front-end wrapper to cypher-shell that executes cypher
   statements and pipes the output into the less pager with options to save
   output. There are two execution scenarios where different command line options
   can apply:
@@ -91,16 +93,16 @@ dashHelpOutput() {
 
   2) Command Line
 
-     Run cypher commands through ${shellName} from the command line. Cypher
+     Run cypher commands through ${shell_name} from the command line. Cypher
      input can be copy / paste, direct entry via an editor or stdin, or piped in.
      The default input and editing is through stdin. It is suggested that the
      --vi option for a seamless REPL experience. External gui editors can be
      used but must be exited for the query to run. It is better to call 
-     ${shellName} from an terminal embedded in a gui editor to get the same
+     ${shell_name} from an terminal embedded in a gui editor to get the same
      REPL experience. 
 
      Neo4j Desktop terminal provides a database compatible version of cypher-shell,
-     but you may have to use the -C | --cypher-shell parameter to tell ${shellName}
+     but you may have to use the -C | --cypher-shell parameter to tell ${shell_name}
      where to find it.
 
   NOTE: The :use database statement does not persist across queries. Each
@@ -194,8 +196,8 @@ dashHelpOutput() {
     there are command line options needed.  For example to launch nano, atom,
     or sublime:
 
-     sublime: ${shellName} -E 'subl --new-window --wait'
-        atom: ${shellName} -E 'atom --new-window --wait'
+     sublime: ${shell_name} -E 'subl --new-window --wait'
+        atom: ${shell_name} -E 'atom --new-window --wait'
 
   -L | --lessOpts <'less command options'>
   
@@ -203,7 +205,7 @@ dashHelpOutput() {
     option that begin with '-' and '--' by prepending each '-' with a '\'
     backslash. E.g. for the script's --lessOpts that defines options to run the
     less pager with using the less --LINE-NUMBERS and --chop-long-lines would be 
-    submitted to ${shellName} as:
+    submitted to ${shell_name} as:
 
        --lessOpts '\-\-LINE-NUMBERS --chop-long-lines'
 
@@ -249,7 +251,7 @@ dashHelpOutput() {
     to be cypher-shell options and are passed through to cypher-shell. An example
     of passing login information to cypher-shell, e.g:
   
-         ${shellName} -a <ip address>
+         ${shell_name} -a <ip address>
 
  INSTALLATION
 
@@ -257,9 +259,9 @@ dashHelpOutput() {
      the Neo4j Graph Database.  Suggesting using a 4.x version of cypher-shell. Alternative is
      to use the --cypher-shell parameter to specify a cypher-shell installation to use. 
 
-  2. Download ${shellName} from github (https://github.com/dfgitn4j/repl-cypher-shell).
+  2. Download ${shell_name} from github (https://github.com/dfgitn4j/repl-cypher-shell).
 
-  2. Make file executable (e.g. chmod 755 ${shellName}).
+  2. Make file executable (e.g. chmod 755 ${shell_name}).
 
   3. Place in directory that is in the PATH variable. For example /usr/local/bin
      seems to be good for mac's because it's in the PATH of the Neo4j Desktop
@@ -281,9 +283,9 @@ dashHelpOutput() {
  
   1. Open an embeded terminal window, e.g. _terminus_ for _Sublime Text 3_ or _platformio-ide-terminal_.
 
-  2. Start  ${shellName}
+  2. Start  ${shell_name}
 
-     - Highlight the  ${shellName} line in the editor and transfer it to the terminal window through 
+     - Highlight the  ${shell_name} line in the editor and transfer it to the terminal window through 
        copy-paste-into-terminal key sequence, or just copy and paste into the terminal.
 
      - Hit Enter key in the terminal window to start the shell if needed. A user name and password will
@@ -308,11 +310,11 @@ dashHelpOutput() {
 
   COMMAND LINE (REPL kind of workflow)
 
-  1. Add  ${shellName} in PATH if needed (e.g. /usr/local/bin)
+  1. Add  ${shell_name} in PATH if needed (e.g. /usr/local/bin)
 
-  2. Determine which cypher-shell to use and then run  ${shellName}
+  2. Determine which cypher-shell to use and then run  ${shell_name}
     
-     a. Run  ${shellName} in a terminal environment that has a version of cypher-shell that is 
+     a. Run  ${shell_name} in a terminal environment that has a version of cypher-shell that is 
         compatible with the database version being connected to in the PATH environment variable. 
 
      b. Use the -C | --cypher-shell command line option to specify the cypher-shell install. 
@@ -320,7 +322,7 @@ dashHelpOutput() {
         a Neo4j Desktop terminal window for the currently running database and run this command from 
         the command line prompt:
 
-        ${shellName} --cypher-shell ./bin/cypher-shell
+        ${shell_name} --cypher-shell ./bin/cypher-shell
 
         !!! It's bad practice to work in the initial directory the shell starts
         in if in a  Neo4j Desktop launched terminal. Mistakes happen, and _any_ files
@@ -332,7 +334,7 @@ dashHelpOutput() {
 
         n4jcypshell="$(pwd)/bin/cypher-shell"
         cd ~/MyWorkingDirectory
-        ${shellName} --cypher-shell $n4jcypshell --vi
+        ${shell_name} --cypher-shell $n4jcypshell --vi
 
 
   EXAMPLES
@@ -340,7 +342,7 @@ dashHelpOutput() {
     - Run cypher-shell with Neo4j database username provided and ask for a
       password if the NEO4J_PASSWORD environment variable is not set:
 
-        ${shellName} -u neo4j
+        ${shell_name} -u neo4j
 
     - Use vi editor and keep an individual file for each cypher command run and save 
       cypher query and results output files:
@@ -348,9 +350,9 @@ dashHelpOutput() {
         sTrp-cypher-shell.sh --vi -u neo4j --time --saveAll
 
     - Use sublime as the editor. Expected scenario is to run
-      ${shellName} from a terminal window *within* the gui editor:
+      ${shell_name} from a terminal window *within* the gui editor:
 
-       ${shellName} --saveCypher -E 'subl --new-window --wait'
+       ${shell_name} --saveCypher -E 'subl --new-window --wait'
 
       See https://www.sublimetext.com/docs/3/osx_command_line.html
 
@@ -360,8 +362,6 @@ THISNEEDSHELP
 setDefaults () {
   # pipe input?
   [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"
-
-  shellName=${0##*/}  # shell name
 
   db_ver_qry="CALL dbms.components() YIELD name, versions, edition
   WITH name, versions, edition WHERE name='Neo4j Kernel'
@@ -944,19 +944,22 @@ runInternalCypher () {
  # remove it if shell has already been run
 cleanAndRunCypher () {
 
-  sed -i '' "/.*${shellName}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
+  sed -i '' "/.*${shell_name}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
   # check to see if the cypher file is empty
   
-  grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherFile}" >/dev/null 2>&1 
-  if [[ $? -ne 0 ]]; then
+  # grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherFile}" >/dev/null 2>&1 
+  if ! grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherFile}" >/dev/null 2>&1  ; then
     cypherRetCode=${RCODE_EMPTY_INPUT} # do not run cypher, trigger continue or exit msg
     printContinueOrExit "Empty input. No cypher to run."
   else 
-
-     # add semicolon to end of file if not there.  need it for cypher to run
-    if ! sed '1!G;h;$!d' ${cypherFile} | awk 'NF{print;exit}' | grep --extended-regexp --quiet '^.*;\s*$|;\s*//.*$'; then
-      printf "%s" ";" >> ${cypherFile}
-    fi
+     # ck to see if have :use db stmt. Cannot be fo
+    #if ! grep --extended-regexp --ignore-case -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?$'; then 
+       # add semicolon to end of file if not there.  need it for cypher to run
+      if ! sed '1!G;h;$!d' ${cypherFile} | awk 'NF{print;exit}' | grep --extended-regexp --quiet '^.*;\s*$|;\s*//.*$'; then
+        # printf "%s" ";" >> ${cypherFile}
+        sed -i '' -e '$s/$/;/' ${cypherFile}
+      fi
+    #fi
      # run cypher in cypher-shell, use eval to allow printf to run in correct order
      # saving results file, run with tee command
     if [[ ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
@@ -994,7 +997,7 @@ intermediateFileHandling () {
     if [[ ${external_editor} -eq 1 ]]; then # use previous file if using editor
       cp ${cur_cypher_qry_file} ${cypherFile}
     fi
-    if [[  ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then
+    if [[ ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then
       if [[ ${save_cypher} == "N" ]]; then
         rm -f ${cur_cypher_qry_file}
       fi
@@ -1021,7 +1024,7 @@ getCypherText () {
   elif [[ ${external_editor} -eq 0 ]]; then # using stdin
     if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
       messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${db_name}"
-      messageOutput "        Ctl-C to terminate stdin and exit ${shellName} without running cypher statement."
+      messageOutput "        Ctl-C to terminate stdin and exit ${shell_name} without running cypher statement."
     fi
       
     if [[ -n ${input_cypher_file_name} && ${edit_cnt} -eq 0 ]]; then # running from a file on first input
@@ -1045,7 +1048,7 @@ getCypherText () {
         fi
       fi
       # ask user if they want to run file or go back to edit
-      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) return to edit, (q) to exit ${shellName} " 
+      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) return to edit, (q) to exit ${shell_name} " 
       if [[ $? -eq 1 ]]; then # answered 'n', continue
         continue  # go back to edit on same file
       else # answered yes to running query

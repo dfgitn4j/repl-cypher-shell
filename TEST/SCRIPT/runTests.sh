@@ -177,15 +177,15 @@ runShell () {
   printf "%02d. " $(( ++runCnt ))  # screen output count
 
   if [[ ${testType} == "STDIN" ]]; then
-    eval ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 2>/dev/null <<EOF
+    eval zsh ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 2>/dev/null <<EOF
     ${testQry}
 EOF
   exitCode=$?
   elif [[ ${testType} == "PIPE" ]]; then
-    echo ${testQry} | eval ${TEST_SHELL} ${callingParams} >${QRY_OUTPUT_FILE} 
+    echo ${testQry} | eval zsh ${TEST_SHELL} ${callingParams} >${QRY_OUTPUT_FILE} 
     exitCode=$?
   elif [[ ${testType} == "FILE" ]]; then # expecting -f <filename> parameter
-    ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 
+    zsh ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 
     exitCode=$?
   else
     # printf "Exiting. Invalid testType specification: '${testType}' Valid entries are STDIN, PIPE, FILE.\n"
@@ -256,14 +256,12 @@ testsToRun () {
   NEO4J_PASSWORD=${pw}
   export NEO4J_PASSWORD
 
+  exitOnError="Y"   # exit if runShell fails
+  # exitOnError="N" # continue if runShell fails
 
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
-  exitOnError="Y" # exit if runShell fails
-
   runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "" "" 0 "" \
            "tesing connection - using NEO4J_[USERNAME PASSWORD] environment variables."
-  # exitOnError="N" # continue if runShell fails
-  
 
   # INVALID PARAMETER TESTS -  none of these test should ever get to executing a query
   printf "\n*** Invalid paramater tests ***\n"  
