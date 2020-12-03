@@ -422,6 +422,7 @@ findStr() {
 enterYesNoQuit() {
   local valid_opts
   local msg
+  local ret_code
   if [[ ${is_pipe} == "N" ]]; then
     if [[ -z ${1} ]]; then
       valid_opts="<CR>YNQynq"
@@ -429,11 +430,11 @@ enterYesNoQuit() {
       valid_opts="${1}"
     fi
     if [[ -z ${2} ]]; then 
-      msg="[<Enter>|Y|y] to continue, [N|n] to return, [<Ctl-C>|Q|q] to quit."
+      msg="[<Enter> | Y<Enter> to continue, N<Enter> to return, Q<Enter> to quit."
     else
       msg="${2}"
     fi
-    printf "%s" "${msg}"
+    printf "\n%s" "${msg}"
     
     read -r option  
     printf -v option "%.1s" "${option}" # get 1st char - no read -N 1 on osx, bummer
@@ -443,44 +444,67 @@ enterYesNoQuit() {
       enterYesNoQuit "${valid_opts}" "${msg}"
     else
       case ${option} in
-        [Yy]) return 0 ;; 
-        [Nn]) return 1 ;;
+        [Yy]) ret_code=0 ;; 
+        [Nn]) ret_code=1 ;;
         [Qq]) exitShell ;;
         *) 
           if [[ -z ${option} ]]; then # press return
-            return 0
+            ret_code=0
           else
             enterYesNoQuit "${valid_opts}" "${msg}"
           fi  
         ;;
       esac
+
+      clear  # made a choice if did not exit
+      if [[ ! -n "${editor_to_use}" ]]; then # no header if using editor
+        outputQryRunMsg
+      fi
+      return ${ret_code}
     fi
   fi
   clear
 }
 
+# $1 is optional message
 printContinueOrExit() {
   local msg=${1:-""}
-  if [[ ${run_once}  == "Y" ]]; then # don't give option to continue
+  if [[ ${run_once}  == "Y" ]]; then # ctl-c; don't give option to continue
     exitShell "${cypherRetCode}"
   fi
   if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
     if [[ -z ${msg} ]]; then
-      enterYesNoQuit "<CR>q" "Press Enter to continue, [Q|q] to quit. "
+      enterYesNoQuit "<CR>q" "Press Enter to continue, Q<Enter> to quit. "
     else 
-      enterYesNoQuit "<CR>q" "${msg} Press Enter to continue, [Q|q] to quit. "
+      enterYesNoQuit "<CR>q" "${msg} Press Enter to continue, Q<Enter> to quit. "
     fi
   fi
 }
 
  # Message outputs
  # Not all messages to to output, some go to tty and results file to stdout
+ # $1 is message $2 is optional format string for printf
 messageOutput() {  # to print or not to print
-  if [[ ${quiet_output} == "N" ]]; then
-    printf "%s\n" "${1}"
+  local fmt_str=${2:-"%s\n"}
+  if [[ ${quiet_output} == "N" && ${is_pipe} == "N"  ]]; then
+    printf "${fmt_str}" "${1}"
   fi
 }
 
+outputWelcomeMsg ()
+{
+  local db_msg
+  if [[ ! -n "${db_name}" ]]; then
+    db_msg="in database ${db_name}"
+  fi
+  messageOutput "Using Neo4j ${db_edition} version ${db_version} as user ${db_username} ${db_msg}" 
+}
+
+outputQryRunMsg ()
+{
+  messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${db_name}"
+  messageOutput "        Ctl-C to terminate stdin and exit ${shell_name} without running cypher statement."
+}
 # one and done cypher-shell options run
 runCypherShellInfoCmd () {
   # messageOutput "Found cypher-shell command argument '${_currentParam}'. Running and exiting. Bye."
@@ -781,7 +805,6 @@ getArgs() {
 
 }
 
-
  
 cleanupConnectFiles() {
   rm ${TMP_DB_CONN_QRY_FILE} ${TMP_DB_CONN_RES_FILE} >/dev/null 2>&1
@@ -795,19 +818,17 @@ exitCleanUp() {
 
     messageOutput " "
     
- # always one number ahead if queries have been run
-        (( file_nbr-- ))
-
-      if [[ ${save_all} == "Y" ]]; then
-        messageOutput "**** Don't forget about the saved $(( file_nbr*2 )) (${QRY_FILE_POSTFIX}) query results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
-      elif [[ ${save_results} == "Y" ]]; then
-        find . -maxdepth 1 -type f -name "${cypherFile}"  -exec rm {} \;  # delete query file
-        messageOutput "**** Don't forget about the saved ${file_nbr} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
-      elif [[ ${save_cypher} == "Y" ]]; then
-        messageOutput "**** Don't forget about the saved ${file_nbr} query files (${QRY_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
-        find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
-      fi
-
+     # always one number ahead if queries have been run
+    (( file_nbr-- ))
+    if [[ ${save_all} == "Y" ]]; then
+      messageOutput "**** Don't forget about the saved $(( file_nbr*2 )) (${QRY_FILE_POSTFIX}) query results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+    elif [[ ${save_results} == "Y" ]]; then
+      find . -maxdepth 1 -type f -name "${cypherFile}"  -exec rm {} \;  # delete query file
+      messageOutput "**** Don't forget about the saved ${file_nbr} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+    elif [[ ${save_cypher} == "Y" ]]; then
+      messageOutput "**** Don't forget about the saved ${file_nbr} query files (${QRY_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+      find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
+    fi
   else # cleanup any file from this session 
     find . -maxdepth 1 -type f -name "${cypherFile}"  -exec rm {} \;
     find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
@@ -825,7 +846,7 @@ exitCleanUp() {
 # exit shell with return code passed in
 exitShell() {
   if [ "${1}" -ne "${1}" ] 2>/dev/null; then # not an integer, then internal error
-    messageOutput "INTERNAL ERRrOR.  Sorry about that.  ${1}"
+    messageOutput "INTERNAL ERROR.  Sorry about that.  ${1}"
     return_code=-1
   elif [[ -z ${1} ]]; then # Ctl-C sent
     return_code=${RCODE_SUCCESS}
@@ -903,14 +924,10 @@ verifyCypherShell () {
   getCypherShellLogin # get cypher-shell login credentials if needed
   echo "${db_ver_qry}" > ${TMP_DB_CONN_QRY_FILE}    # get database version query
   runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"
-
-  if [[ ${quiet_output} == "N" && ${is_pipe} == "N" ]]; then
-    msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
-    db_version=${msg_arr[@]:0:1}
-    db_edition=${msg_arr[@]:1:1}
-    db_username=${msg_arr[@]:2:1}
-    messageOutput "Using Neo4j ${db_edition} version ${db_version} as user ${db_username}" 
-  fi
+  msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
+  db_version=${msg_arr[@]:0:1}
+  db_edition=${msg_arr[@]:1:1}
+  db_username=${msg_arr[@]:2:1}
   cleanupConnectFiles
 }
 
@@ -927,6 +944,7 @@ runInternalCypher () {
     messageOutput ""
     messageOutput "=========="
     messageOutput "ERROR: cypher-shell generated error"
+    outputWelcomeMsg  # db version, neo4j edition, user if known
     messageOutput "Using this cypher-shell: ${use_this_cypher_shell}"
     messageOutput "cypher-shell return code: ${cypherRetCode}"
     messageOutput "Script started with: ${coll_args}"
@@ -1023,8 +1041,7 @@ getCypherText () {
     return
   elif [[ ${external_editor} -eq 0 ]]; then # using stdin
     if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
-      messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${db_name}"
-      messageOutput "        Ctl-C to terminate stdin and exit ${shell_name} without running cypher statement."
+      outputQryRunMsg # output run query header
     fi
       
     if [[ -n ${input_cypher_file_name} && ${edit_cnt} -eq 0 ]]; then # running from a file on first input
@@ -1092,8 +1109,8 @@ executionLoop () {
 }
 
 # main
-#trap exitShell ${cypherRetCode} EXIT
-trap exitShell SIGINT 
+# trap exitShell SIGINT 
+trap printContinueOrExit SIGINT 
 
 clear
 setDefaults
@@ -1101,6 +1118,7 @@ getArgs "$@"
 haveCypherShell
 verifyCypherShell   # verify that can connect to cypher-shell
 get4xDbName         # get database name if using 4.x
+outputWelcomeMsg
 executionLoop       # execute cypher statements
 exitShell ${RCODE_SUCCESS}
 
