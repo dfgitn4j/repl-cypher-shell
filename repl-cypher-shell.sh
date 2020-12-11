@@ -430,7 +430,7 @@ enterYesNoQuit() {
       valid_opts="${1}"
     fi
     if [[ -z ${2} ]]; then 
-      msg="[<Enter> | Y<Enter> to continue, N<Enter> to return, Q<Enter> to quit."
+      msg="[<Enter> | y <Enter> to continue, N<Enter> to return, q <Enter> to quit."
     else
       msg="${2}"
     fi
@@ -474,9 +474,9 @@ printContinueOrExit() {
   fi
   if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
     if [[ -z ${msg} ]]; then
-      enterYesNoQuit "<CR>q" "Press Enter to continue, Q<Enter> to quit. "
+      enterYesNoQuit "<CR>q" "Press Enter to continue, q<CR> to quit. "
     else 
-      enterYesNoQuit "<CR>q" "${msg} Press Enter to continue, Q<Enter> to quit. "
+      enterYesNoQuit "<CR>q" "${msg} Press Enter to continue, q<CR> to quit. "
     fi
   fi
 }
@@ -484,6 +484,7 @@ printContinueOrExit() {
  # Message outputs
  # Not all messages to to output, some go to tty and results file to stdout
  # $1 is message $2 is optional format string for printf
+
 messageOutput() {  # to print or not to print
   local fmt_str=${2:-"%s\n"}
   if [[ ${quiet_output} == "N" && ${is_pipe} == "N"  ]]; then
@@ -494,17 +495,22 @@ messageOutput() {  # to print or not to print
 outputWelcomeMsg ()
 {
   local db_msg
-  if [[ ! -n "${db_name}" ]]; then
+  if [[  -n "${db_name}" ]]; then
     db_msg="in database ${db_name}"
   fi
-  messageOutput "Using Neo4j ${db_edition} version ${db_version} as user ${db_username} ${db_msg}" 
+  messageOutput "Using Neo4j ${db_edition:-?} version ${db_version:-?} as user ${db_username:-?} ${db_msg}" 
 }
 
 outputQryRunMsg ()
 {
-  messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${db_name}"
+  local db_msg
+  if [[  -n "${db_name}" ]]; then
+    db_msg="Database: ${db_name}"
+  fi
+  messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${db_msg}"
   messageOutput "        Ctl-C to terminate stdin and exit ${shell_name} without running cypher statement."
 }
+
 # one and done cypher-shell options run
 runCypherShellInfoCmd () {
   # messageOutput "Found cypher-shell command argument '${_currentParam}'. Running and exiting. Bye."
@@ -523,6 +529,7 @@ runCypherShellInfoCmd () {
  #      arg_ret_opts="abc 1 dec"
  #      arg_shift_cnt=3
  # calling function then needs to shift it's input array by arg_shift_cnt
+
 getOptArgs() {
 
   arg_ret_opts=""  # init no options found
@@ -804,7 +811,6 @@ getArgs() {
   cypher_shell_cmd_line="${user_name} ${user_password} ${use_params} ${cypherShellArgs} ${cypher_format_arg}"
 
 }
-
  
 cleanupConnectFiles() {
   rm ${TMP_DB_CONN_QRY_FILE} ${TMP_DB_CONN_RES_FILE} >/dev/null 2>&1
@@ -875,6 +881,7 @@ haveCypherShell () {
 }
 
  # need to do our own uid / pw input when not getting cypher pasted in
+
 getCypherShellLogin () {
 
   if [[ ${no_login_needed} == "N" ]]; then
@@ -909,7 +916,7 @@ get4xDbName () {
     echo "${db_40_db_name_qry}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
     runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
     msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
-    db_name="Database: ${msg_arr[@]:0:1}"
+    db_name="${msg_arr[@]:0:1}"
     cleanupConnectFiles
   else
     db_name=""
@@ -960,6 +967,7 @@ runInternalCypher () {
 
  # look to see if this shell launch statement is included in the input and
  # remove it if shell has already been run
+
 cleanAndRunCypher () {
 
   sed -i '' "/.*${shell_name}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
@@ -985,7 +993,7 @@ cleanAndRunCypher () {
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
             '${use_this_cypher_shell}' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
     else 
-      eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
+        eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// %s %s\n' "${TIME_OUTPUT_HEADER}" \""$(date)"\";  \
             '${use_this_cypher_shell}' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less 
     fi
@@ -1076,11 +1084,11 @@ getCypherText () {
   (( edit_cnt++ ))  # increment query edit count
 }
 
-
 # main loop for running cypher-shell until termination condition
 executionLoop () {
-
+  
   while true; do
+    
      # LESS: comment this out if using less --quit-at-eof type options
     if [[ ${edit_cnt} -gt 0 ]]; then # 0 means leave connection message
       clear # clear the terminal
