@@ -912,16 +912,14 @@ getCypherShellLogin () {
 }
   
 get4xDbName () {
+  db_name=""
   if [[ ${db_version} == *$'4.'* ]]; then
     echo "${db_40_db_name_qry}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
     runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
     msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
     db_name="${msg_arr[@]:0:1}"
     cleanupConnectFiles
-  else
-    db_name=""
   fi
-
 }
 
 verifyCypherShell () {
@@ -1119,6 +1117,7 @@ executionLoop () {
 # main
 # trap exitShell SIGINT 
 trap printContinueOrExit SIGINT 
+trap exitCleanUp SIGHUP SIGKILL SIGTERM
 
 clear
 setDefaults
