@@ -311,6 +311,7 @@ testsToRun () {
 
   runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "" "--invalid param" "" 0 "" \
            "invalid param test - invalid parameter argument value."
+
   runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "" "--address n0h0st" "" 0 "" \
            "invalid param test - bad pass-thru argument to cypher-shell."
 
