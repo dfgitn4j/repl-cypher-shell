@@ -1117,7 +1117,7 @@ executionLoop () {
 # main
 # trap exitShell SIGINT 
 trap printContinueOrExit SIGINT 
-trap exitCleanUp SIGHUP SIGKILL SIGTERM
+trap exitCleanUp SIGHUP SIGKILL   # not that sigkill lets you die with your affairs in order
 
 clear
 setDefaults
