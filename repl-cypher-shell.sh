@@ -481,9 +481,9 @@ printContinueOrExit() {
   fi
 }
 
- # Message outputs
- # Not all messages to to output, some go to tty and results file to stdout
- # $1 is message $2 is optional format string for printf
+# Message outputs
+# Not all messages to to output, some go to tty and results file to stdout
+# $1 is message $2 is optional format string for printf
 
 messageOutput() {  # to print or not to print
   local fmt_str=${2:-"%s\n"}
@@ -1115,12 +1115,15 @@ executionLoop () {
 }
 
 # main
-# trap exitShell SIGINT 
 trap printContinueOrExit SIGINT 
-trap exitCleanUp SIGHUP SIGKILL   # not that sigkill lets you die with your affairs in order
+trap exitShell SIGHUP SIGTERM SIGEXIT
 
-clear
 setDefaults
+
+if [[ ${is_pipe} == "N" ]]; then
+  clear
+fi
+
 getArgs "$@"
 haveCypherShell
 verifyCypherShell   # verify that can connect to cypher-shell
