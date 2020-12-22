@@ -308,7 +308,7 @@ dashHelpOutput() {
   editor is for. 
 
 
-  COMMAND LINE (REPL kind of workflow)
+  COMMAND LINE (REPL kind of workflow)
 
   1. Add  ${shell_name} in PATH if needed (e.g. /usr/local/bin)
 
@@ -474,9 +474,9 @@ printContinueOrExit() {
   fi
   if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
     if [[ -z ${msg} ]]; then
-      enterYesNoQuit "<CR>q" "Press Enter to continue, q<CR> to quit. "
+      enterYesNoQuit "<CR>q" "Press Enter to continue, q Enter to quit. "
     else 
-      enterYesNoQuit "<CR>q" "${msg} Press Enter to continue, q<CR> to quit. "
+      enterYesNoQuit "<CR>q" "${msg} Press Enter to continue, q Enter to quit. "
     fi
   fi
 }
@@ -577,10 +577,11 @@ getArgs() {
   # Note: less will clear screen before user sees ouput if the quit-at-end options
   # are used. e.g. --quit-at-eof.  Look for comment with string "LESS:" in script
   # if this behavior bugs you.
-  less_options='--LONG-PROMPT --shift .05'
+  less_options='--LONG-PROMPT --shift .05 --line-numbers'
 
   user_name=""               # blank string by default
   user_password=""
+
   cypherShellArgs=""         # any args not in case are assumed to be cypher-shell specific args passed in
   cypher_format_arg="--format verbose " # need extra space at end for param validation test
   cypher_shell_cmd_line=""   # a string with all the cypher-shell specific command line opts, if passed in.
@@ -625,6 +626,8 @@ getArgs() {
          coll_args="${coll_args} ${use_this_cypher_shell}"
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
+
+         # intercepted cypher-shell args
       -P | --param)
          getOptArgs 1  "$@"
          use_params="${use_params} ${_currentParam} '${arg_ret_opts}'"
@@ -638,19 +641,28 @@ getArgs() {
          shift "${arg_shift_cnt}" # go past number of params processed
          coll_args="${coll_args} ${input_cypher_file}"
          ;;
-      --format)
+      --format) # cypher-shell format option
          getOptArgs 1 "$@"
          # note the extra space at end of cypher_format_arg makes validation testing below easier
          cypher_format_arg="${_currentParam} ${arg_ret_opts} "
          shift "${arg_shift_cnt}" # go past number of params processed
          coll_args="${coll_args} ${cypher_format_arg}"
          ;;
+      -d | --database) 
+           # intercept cypher-shell -d DATABASE parameter. Used to determine
+           # which db to run query in based on last command line or last :use command
+         getOptArgs 1 "$@"
+         db_name="${arg_ret_opts}"
+         coll_args="${coll_args} ${db_name}"
+         shift "${arg_shift_cnt}" # go past number of params processed
+         ;;
         # one and done cyphe-shell command line options
-      -v | --version | --driver-version) # keep cypher queries and output results files.
+      -v | --version | --driver-version) # 
          getOptArgs 0 "$@"
          cypherShellInfoArg=${_currentParam}
          shift "${arg_shift_cnt}"
          ;;
+
         # begin shell specific options
         # save optoins
       -A | --saveAll) # keep cypher queries and output results files.
@@ -911,39 +923,16 @@ getCypherShellLogin () {
   fi
 }
   
-get4xDbName () {
-  db_name=""
-  if [[ ${db_version} == *$'4.'* ]]; then
-    echo "${db_40_db_name_qry}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
-    runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
-    msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
-    db_name="${msg_arr[@]:0:1}"
-    cleanupConnectFiles
-  fi
-}
-
-verifyCypherShell () {
-  # connect to cypher-shell and get details
-  messageOutput "Connecting to database"
-
-  getCypherShellLogin # get cypher-shell login credentials if needed
-  echo "${db_ver_qry}" > ${TMP_DB_CONN_QRY_FILE}    # get database version query
-  runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"
-  msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
-  db_version=${msg_arr[@]:0:1}
-  db_edition=${msg_arr[@]:1:1}
-  db_username=${msg_arr[@]:2:1}
-  cleanupConnectFiles
-}
-
 runInternalCypher () {
   local qry_file 
   local out_file 
   qry_file="${1}"
   out_file="${2}"
 
+  fmtCurrentDbCmdArg # use 'current db' for db_cmd_arg
+
    # cypher-shell with no formatting args to be able to parse the output string
-  eval "'${use_this_cypher_shell}'" "${user_name}" "${user_password}" "${cypherShellArgs}" --format plain < "${qry_file}" > "${out_file}" 2>&1
+  eval "'${use_this_cypher_shell}'" "${user_name}" "${user_password}" "${db_cmd_arg}" "${cypherShellArgs}"  --format plain < "${qry_file}" > "${out_file}" 2>&1
   cypherRetCode=$?
   if [[ ${cypherRetCode} -ne 0 ]]; then
     messageOutput ""
@@ -963,45 +952,89 @@ runInternalCypher () {
   fi
 }
 
- # look to see if this shell launch statement is included in the input and
- # remove it if shell has already been run
+verifyCypherShell () {
+  # connect to cypher-shell and get details
+  messageOutput "Connecting to database"
+
+  getCypherShellLogin # get cypher-shell login credentials if needed
+  echo "${db_ver_qry}" > ${TMP_DB_CONN_QRY_FILE}    # get database version query
+  runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"
+  msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
+  db_version=${msg_arr[@]:0:1}
+  db_edition=${msg_arr[@]:1:1}
+  db_username=${msg_arr[@]:2:1}
+  cleanupConnectFiles
+}
+
+get4xDbName () {
+  # db_name not set, and 4.x ver of Neo4j
+  if [[ -n ${db_name} ]] && [[ ${db_version} == *$'4.'* ]]; then
+    echo "${db_40_db_name_qry}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
+    runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
+    msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
+    db_name="${msg_arr[@]:0:1}"
+    cleanupConnectFiles
+  fi
+}
+
+ # set the cypher-shell cmd line arg for db
+ # either passed on cmd line, or last :use stmtn
+
+fmtCurrentDbCmdArg () {
+  db_cmd_arg=""
+  if [[ ! -z ${db_name} ]]; then # db specified on cmd line or :use stmt
+    db_cmd_arg="-d ${db_name}"
+  fi
+}
+
+ # find last :use database statement to use as the db to run next call to cypher-shell
+ # provides a seamless, single session cypher-shell experience
+findColonUseStmnt () {
+  # last_use_stmt=$(grep --extended-regexp --ignore-case -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?[;]{0,1}.*$' "${cypherFile}" 2>/dev/null | sed -E -e 's/[`]//g' -e "s/.*:use[ $(printf '\t')]*//" -e 's/;//' | tail -1)
+  last_use_stmt=$(grep --extended-regexp --ignore-case --color=never -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?[;]{0,1}.*$' "${cypherFile}" | tail -1 | sed -E -e 's/[`]//g' -e "s/.*:use[ ]*//" -e 's/;//' )
+  if [[ ! -z ${last_use_stmt} ]]; then
+    db_name="${last_use_stmt}"
+    fmtCurrentDbCmdArg
+  fi
+}
+
 
 cleanAndRunCypher () {
 
   sed -i '' "/.*${shell_name}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
-  # check to see if the cypher file is empty
   
-  # grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherFile}" >/dev/null 2>&1 
+   # check to see if the cypher file is empty
   if ! grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherFile}" >/dev/null 2>&1  ; then
     cypherRetCode=${RCODE_EMPTY_INPUT} # do not run cypher, trigger continue or exit msg
     printContinueOrExit "Empty input. No cypher to run."
   else 
-     # ck to see if have :use db stmt. Cannot be fo
-    #if ! grep --extended-regexp --ignore-case -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?$'; then 
        # add semicolon to end of file if not there.  need it for cypher to run
       if ! sed '1!G;h;$!d' ${cypherFile} | awk 'NF{print;exit}' | grep --extended-regexp --quiet '^.*;\s*$|;\s*//.*$'; then
         # printf "%s" ";" >> ${cypherFile}
         sed -i '' -e '$s/$/;/' ${cypherFile}
       fi
-    #fi
+
      # run cypher in cypher-shell, use eval to allow printf to run in correct order
      # saving results file, run with tee command
+
     if [[ ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            '${use_this_cypher_shell}' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
+            '${use_this_cypher_shell}' ${db_cmd_arg} ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
     else 
         eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// %s %s\n' "${TIME_OUTPUT_HEADER}" \""$(date)"\";  \
-            '${use_this_cypher_shell}' ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less 
+            '${use_this_cypher_shell}' ${db_cmd_arg} ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less 
     fi
 
      # ck return code - PIPESTATUS[0] for bash, pipestatus[1] for zsh
     if [[ ${PIPESTATUS[0]} -ne 0 || ${pipestatus[1]} -ne 0 ]]; then
       cypherRetCode=${RCODE_CYPHER_SHELL_ERROR}
     else
+      findColonUseStmnt 
       cypherRetCode=${RCODE_SUCCESS}
     fi
+
   fi
 }
 
@@ -1071,7 +1104,7 @@ getCypherText () {
         fi
       fi
       # ask user if they want to run file or go back to edit
-      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) return to edit, (q) to exit ${shell_name} " 
+      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) to edit, (q) to exit ${shell_name} " 
       if [[ $? -eq 1 ]]; then # answered 'n', continue
         continue  # go back to edit on same file
       else # answered yes to running query
@@ -1116,7 +1149,7 @@ executionLoop () {
 
 # main
 trap printContinueOrExit SIGINT 
-trap exitShell SIGHUP SIGTERM SIGEXIT
+trap exitShell SIGHUP SIGTERM 
 
 setDefaults
 
@@ -1128,6 +1161,7 @@ getArgs "$@"
 haveCypherShell
 verifyCypherShell   # verify that can connect to cypher-shell
 get4xDbName         # get database name if using 4.x
+fmtCurrentDbCmdArg # use 'current db' for db_cmd_arg
 outputWelcomeMsg
 executionLoop       # execute cypher statements
 exitShell ${RCODE_SUCCESS}
