@@ -31,7 +31,7 @@ usage() {
     [-C | --cypher-shell]    path to cypher-shell executable to be used. Run --help for how to use.
     [-P | --param]           cypher-shell -P | --param strings. Run --help for how to use.
     [-f | --file]            cypher-shell -f | --file containing query. Run --help for how to use.
-    [--format]               cypher-shell --format option.
+    [--format]               cypher-shell --format option.query results files
 
     [-A | --saveAll]         save cypher query and output results files.
     [-S | --saveCypher]      save each query statement in a file.
@@ -829,17 +829,16 @@ cleanupConnectFiles() {
 }
 
 exitCleanUp() {
-  if [[ ${save_cypher} == "Y" || ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
+  (( file_nbr-- )) # always one number ahead if queries have been run
+  if [[ ${save_cypher} == "Y" || ${save_results}  == "Y" || ${save_all}  == "Y" ]] && [[ $file_nbr -gt 0 ]]; then
 
      # current edit produced $QRY_FILE_POSTFIX file may be empty on ctl-c
     find . -maxdepth 1 -type f -empty -name "${cypherFile}"  -exec rm {} \;
 
     messageOutput " "
     
-     # always one number ahead if queries have been run
-    (( file_nbr-- ))
     if [[ ${save_all} == "Y" ]]; then
-      messageOutput "**** Don't forget about the saved $(( file_nbr*2 )) (${QRY_FILE_POSTFIX}) query results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+      messageOutput "**** Don't forget about the saved $(( file_nbr*2 )) (${QRY_FILE_POSTFIX}) query and results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
     elif [[ ${save_results} == "Y" ]]; then
       find . -maxdepth 1 -type f -name "${cypherFile}"  -exec rm {} \;  # delete query file
       messageOutput "**** Don't forget about the saved ${file_nbr} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
