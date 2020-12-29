@@ -1,4 +1,4 @@
-#set -xv
+# sset -xv
 # script to front-end cypher-shell and pass output to pager
 
 ### shell accomodations
@@ -394,6 +394,8 @@ setDefaults () {
   db_name=""        # will only be populated on neo4j 4.x databases
 
    # variables used in file name creation
+   # file patterns are in the form of:
+   # ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} (${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})
   SESSION_ID="${RANDOM}" # nbr to id this session. For when keeping intermediate cypher files
   OUTPUT_FILES_PREFIX="qry" # prefix all intermediate files begin with
   QRY_FILE_POSTFIX=".cypher" # prefix all intermediate files begin with
@@ -401,8 +403,10 @@ setDefaults () {
   TMP_FILE="tmpEditorCypherFile.${SESSION_ID}"
   TMP_DB_CONN_QRY_FILE="tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
   TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
-  TIME_OUTPUT_HEADER="Query started:"
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
+
+  save_qry_file_pattern="${OUTPUT_FILES_PREFIX}.*${SESSION_ID}.*${QRY_FILE_POSTFIX}"
+  save_results_file_pattern="${OUTPUT_FILES_PREFIX}.*${SESSION_ID}.*${RESULTS_FILE_POSTFIX}"
 }
 
 # ${1} is the string to find
@@ -518,6 +522,8 @@ runCypherShellInfoCmd () {
   exitShell ${?}
 }
 
+getOptArgs() {
+
  # getOptArgs - gets 0 or more flag options, sets a var with the vals in arg_ret_opts for a flag until next
  #  flag, and sets arg_shift_cnt as the number of options found to shift the source array
  #  and does error cking.
@@ -529,8 +535,6 @@ runCypherShellInfoCmd () {
  #      arg_ret_opts="abc 1 dec"
  #      arg_shift_cnt=3
  # calling function then needs to shift it's input array by arg_shift_cnt
-
-getOptArgs() {
 
   arg_ret_opts=""  # init no options found
   arg_nbr_expected_opts="${1}"  # nbr options expected
@@ -598,7 +602,7 @@ getArgs() {
   use_params=""              # query parameter arguments
   input_cypher_file_name=""  # intput file
   use_this_cypher_shell=""   # cypher-shell to use. mostly for desktop
-  external_editor=0               # = 1 if using vi or external editor, > 1 error
+  external_editor=0          # = 1 if using vi or external editor, > 1 error
 
   cypherRetCode=${RCODE_SUCCESS} # cypher-shell return code
 
@@ -668,6 +672,8 @@ getArgs() {
       -A | --saveAll) # keep cypher queries and output results files.
          getOptArgs 0 "$@"
          save_all="Y"
+         save_cypher="Y"
+         save_results="Y"
          coll_args="${coll_args} ${_currentParam}"
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
@@ -788,8 +794,10 @@ getArgs() {
     messageOutput "Invalid --format option: '${cypher_format_arg}'."
     return_code=${RCODE_INVALID_FORMAT_STR}
   elif [[ ${external_editor} -gt 1 ]]; then
-    messageOutput "Invalid command line options.  Cannot use vi and another editor at the same time."
+    messageOutput "Invalid command line options. Cannot specify multiple editors."
     return_code=${RCODE_INVALID_CMD_LINE_OPTS}
+  elif [[ ${save_all} == "Y" ]] && [[ ${save_results} == "Y" || ${save_cypher} == "Y" ]]; then
+    messageOutput "Invalid command line options. Cannot specify saving all files and / or only saving cypher and results."
   elif [[ ${external_editor} -eq 1 && ${run_once} == "Y" ]]; then
     messageOutput "Invalid command line options.  Cannot use an editor and run once at the same time."
     return_code=${RCODE_INVALID_CMD_LINE_OPTS}
@@ -820,7 +828,7 @@ getArgs() {
   fi
 
     # string with all the cypher-shell only command line arguments. 
-  cypher_shell_cmd_line="${user_name} ${user_password} ${use_params} ${cypherShellArgs} ${cypher_format_arg}"
+  setCypherShellCmdLine
 
 }
  
@@ -828,23 +836,22 @@ cleanupConnectFiles() {
   rm ${TMP_DB_CONN_QRY_FILE} ${TMP_DB_CONN_RES_FILE} >/dev/null 2>&1
 }
 
-exitCleanUp() {
-  (( file_nbr-- )) # always one number ahead if queries have been run
-  if [[ ${save_cypher} == "Y" || ${save_results}  == "Y" || ${save_all}  == "Y" ]] && [[ $file_nbr -gt 0 ]]; then
+existingFileCnt () {
+  # 1st param is the file pattern to test
+  printf '%0d' $(find * -type f -depth 0 | grep --color=never -E "${1}" | wc -l ) 
+}
 
+exitCleanUp() {
+
+  if [[ ${save_cypher} == "Y" || ${save_results}  == "Y" ]]; then
      # current edit produced $QRY_FILE_POSTFIX file may be empty on ctl-c
     find . -maxdepth 1 -type f -empty -name "${cypherFile}"  -exec rm {} \;
-
-    messageOutput " "
-    
-    if [[ ${save_all} == "Y" ]]; then
-      messageOutput "**** Don't forget about the saved $(( file_nbr*2 )) (${QRY_FILE_POSTFIX}) query and results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
-    elif [[ ${save_results} == "Y" ]]; then
-      find . -maxdepth 1 -type f -name "${cypherFile}"  -exec rm {} \;  # delete query file
-      messageOutput "**** Don't forget about the saved ${file_nbr} results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
-    elif [[ ${save_cypher} == "Y" ]]; then
-      messageOutput "**** Don't forget about the saved ${file_nbr} query files (${QRY_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
-      find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
+  
+    if [[ ${save_results} == "Y" ]]; then
+      messageOutput "**** There are $(existingFileCnt "${save_results_file_pattern}") results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+    fi
+    if [[ ${save_cypher} == "Y" ]]; then
+      messageOutput "**** There are $(existingFileCnt "${save_cypher_file_pattern}") query files (${QRY_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
     fi
   else # cleanup any file from this session 
     find . -maxdepth 1 -type f -name "${cypherFile}"  -exec rm {} \;
@@ -860,8 +867,20 @@ exitCleanUp() {
   fi
 }
 
-# exit shell with return code passed in
+consumeStdIn () {
+    # There can be after error text being sent to an embedded terminal that should be discarded
+    # $1 is the timeout to wait for EOL.  Used to allow initial read to process any pasted text in buffer
+  if [[ ${is_pipe} == "N" ]]; then
+    while read -t $1 -u 0 -rs x; do
+      consumeStdIn 0 # no need to wait for input after first line
+    done
+  fi
+
+}
+
 exitShell() {
+  # exit shell with return code passed in
+  consumeStdIn 1 # disccard extra paste lines passed in, if any. Wait 1s for input to catch up with paste
   if [ "${1}" -ne "${1}" ] 2>/dev/null; then # not an integer, then internal error
     messageOutput "INTERNAL ERROR.  Sorry about that.  ${1}"
     return_code=-1
@@ -875,8 +894,8 @@ exitShell() {
 
 }
 
-# validate cypher-shell in PATH
 haveCypherShell () {
+  # validate cypher-shell in PATH
   # ck to see if you can connect to cypher-shell w/o error
   if [[ -z ${use_this_cypher_shell} ]]; then
     if ! which cypher-shell > /dev/null; then
@@ -891,10 +910,9 @@ haveCypherShell () {
   fi
 }
 
- # need to do our own uid / pw input when not getting cypher pasted in
 
 getCypherShellLogin () {
-
+   # need to do our own uid / pw input if not set
   if [[ ${no_login_needed} == "N" ]]; then
       # get user name if needed
     if [[ -z ${user_name} && -z ${NEO4J_USERNAME} ]]; then # uid not in env var or command line
@@ -912,17 +930,18 @@ getCypherShellLogin () {
         messageOutput "Missing password needed for non-interactive input (pipe). Bye."
         exitShell ${RCODE_NO_PASSWORD}
       fi
-      stty -echo # turn echo off
+      # stty -echo # turn echo off
       printf 'password: '
-      read user_password
+      read -ers user_password
       user_password=" -p ${user_password} "  # for command line if needed
-      stty echo  # turn echo on
-      echo
+      # stty echo  # turn echo on
     fi
+    setCypherShellCmdLine  # add uid / pw command line params if needed
   fi
 }
   
 runInternalCypher () {
+  # run internal cypher queries, always --format plain
   local qry_file 
   local out_file 
   qry_file="${1}"
@@ -967,22 +986,29 @@ verifyCypherShell () {
 
 get4xDbName () {
   # db_name not set, and 4.x ver of Neo4j
-  if [[ -n ${db_name} ]] && [[ ${db_version} == *$'4.'* ]]; then
+  if [[ -z "${db_name}" ]] && [[ ${db_version} == *$'4.'* ]]; then
     echo "${db_40_db_name_qry}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
     runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
     msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
     db_name="${msg_arr[@]:0:1}"
     cleanupConnectFiles
   fi
+
 }
+
+setCypherShellCmdLine () {
+  # set the cypher-shell command line arguments.
+  cypher_shell_cmd_line="'${use_this_cypher_shell}' ${user_name} ${user_password} ${use_params} ${db_cmd_arg} ${cypherShellArgs} ${cypher_format_arg}"
+}
+
 
  # set the cypher-shell cmd line arg for db
  # either passed on cmd line, or last :use stmtn
-
 fmtCurrentDbCmdArg () {
   db_cmd_arg=""
   if [[ ! -z ${db_name} ]]; then # db specified on cmd line or :use stmt
     db_cmd_arg="-d ${db_name}"
+    setCypherShellCmdLine
   fi
 }
 
@@ -1014,16 +1040,15 @@ cleanAndRunCypher () {
       fi
 
      # run cypher in cypher-shell, use eval to allow printf to run in correct order
-     # saving results file, run with tee command
-
-    if [[ ${save_results}  == "Y" || ${save_all}  == "Y" ]]; then
+     # saving results file, run with tee command to create file
+    if [[ ${save_results}  == "Y" ]]; then
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            '${use_this_cypher_shell}' ${db_cmd_arg} ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
+            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
     else 
         eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
-            [[ ${qry_start_time} == "Y" ]] && printf '// %s %s\n' "${TIME_OUTPUT_HEADER}" \""$(date)"\";  \
-            '${use_this_cypher_shell}' ${db_cmd_arg} ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less 
+            [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
+            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less 
     fi
 
      # ck return code - PIPESTATUS[0] for bash, pipestatus[1] for zsh
@@ -1053,15 +1078,12 @@ intermediateFileHandling () {
     if [[ ${external_editor} -eq 1 ]]; then # use previous file if using editor
       cp ${cur_cypher_qry_file} ${cypherFile}
     fi
-    if [[ ${save_cypher} == "Y" || ${save_results} == "Y" ]]; then
-      if [[ ${save_cypher} == "N" ]]; then
-        rm -f ${cur_cypher_qry_file}
-      fi
-      if [[ ${save_results} == "N" ]]; then
-        rm -f ${resultsFile}  
-      fi
-    elif [[ ${save_all} == "N" ]]; then # saving nothing
+
+    if [[ ${save_cypher} == "N" ]]; then
       find . -maxdepth 1 -type f -name "${cur_cypher_qry_file}"  -exec rm {} \;
+    fi
+
+    if [[ ${save_results} == "N" ]]; then
       find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
     fi
   elif [[ ${edit_cnt} -eq 0 ]]; then # 1st time thru w/ input file

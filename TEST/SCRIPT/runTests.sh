@@ -1,4 +1,4 @@
-#set -xv
+set -xv
 # test parameters in script.  Simpler than using expect
 #
 # Run with one parameter will return the variables used as exit codes in the 
@@ -85,7 +85,7 @@ exitShell () {
 
   existingFileCnt "${saveAllFilePattern}" # should be no files. error if there is
   if [[ ${_fileCnt} -ne 0 ]]; then
-    printf "%s\n\n" "Please clean up ${_fileCnt} previous output files. Tests can fail when they shouldn't if left in place."
+    printf "%Please clean up %d previous output files. Tests can fail when they shouldn't if left in place.\n\n" ${_fileCnt} 
     find * -type f -depth 0 | grep  -E "${1}" 
     printf "%s\n\n" "Bye."
   fi
@@ -104,16 +104,17 @@ interruptShell () {
 exitOnError () {
   if [[ ${exitOnError} == "Y" ]]; then
     printf "%s\n\n" "Encountered a testing error and stopOnError = '${exitOnError}'.  Bye."
-    rm ${QRY_OUTPUT_FILE} 
+    rm -f ${QRY_OUTPUT_FILE} 
     exit
   fi 
 }
 
+
 existingFileCnt () {
   # 1st param is the file pattern to test
   _fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${1}" | wc -l ) 
+  exit 0
 }
-
 
 # output for screen and results file
 printOutput () {
@@ -258,7 +259,9 @@ testsToRun () {
 
   exitOnError="Y"   # exit if runShell fails
   # exitOnError="N" # continue if runShell fails
-
+  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--saveAll" "${saveAllFilePattern}" 2 "" \
+           "file tests - save cypher query and text results files."
+  exit 0
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "" "" 0 "" \
            "tesing connection - using NEO4J_[USERNAME PASSWORD] environment variables."
