@@ -590,7 +590,6 @@ getArgs() {
   cypher_format_arg="--format verbose " # need extra space at end for param validation test
   cypher_shell_cmd_line=""   # a string with all the cypher-shell specific command line opts, if passed in.
   no_login_needed="N"        # skip login prompting
-  save_all="N"               # save each query and output to own files
   save_cypher="N"            # save each query in own file
   save_results="N"           # save each query output in own file
   show_cmd_line="N"          # show command line args in output
@@ -671,7 +670,6 @@ getArgs() {
         # save optoins
       -A | --saveAll) # keep cypher queries and output results files.
          getOptArgs 0 "$@"
-         save_all="Y"
          save_cypher="Y"
          save_results="Y"
          coll_args="${coll_args} ${_currentParam}"
@@ -796,8 +794,6 @@ getArgs() {
   elif [[ ${external_editor} -gt 1 ]]; then
     messageOutput "Invalid command line options. Cannot specify multiple editors."
     return_code=${RCODE_INVALID_CMD_LINE_OPTS}
-  elif [[ ${save_all} == "Y" ]] && [[ ${save_results} == "Y" || ${save_cypher} == "Y" ]]; then
-    messageOutput "Invalid command line options. Cannot specify saving all files and / or only saving cypher and results."
   elif [[ ${external_editor} -eq 1 && ${run_once} == "Y" ]]; then
     messageOutput "Invalid command line options.  Cannot use an editor and run once at the same time."
     return_code=${RCODE_INVALID_CMD_LINE_OPTS}
@@ -1058,7 +1054,6 @@ cleanAndRunCypher () {
       findColonUseStmnt 
       cypherRetCode=${RCODE_SUCCESS}
     fi
-
   fi
 }
 
