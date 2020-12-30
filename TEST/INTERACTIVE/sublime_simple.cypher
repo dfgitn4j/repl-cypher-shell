@@ -1,4 +1,4 @@
-./repl-cypher-shell.sh --time --saveAll -u neo4j
+./repl-cypher-shell.sh --time  -u  neo4j
 
 // Terminus package is used for output
  // send selected text to terminal and run key sequence is mapped

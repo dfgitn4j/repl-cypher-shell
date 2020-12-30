@@ -1,15 +1,6 @@
-# sset -xv
+# set -xv
 # script to front-end cypher-shell and pass output to pager
 
-### shell accomodations
-
-# for zsh to avoid having to do this for command line word split in this shell
-# args=(${user_name} ${_} ${cypherShellArgs} ${cypher_format_arg})
-# cypher-shell "${args[@]}"
-setopt SH_WORD_SPLIT >/dev/null 2>&1
-set -o pipefail
-
-shell_name=${0##*/}  # shell name must be set here to avoid zsh / bash diffs
 
 usage() {
 
@@ -18,13 +9,13 @@ usage() {
 
  NAME
 
-  ${shell_name}
+  ${SHELL_NAME}
    - Frontend to cypher-shell with REPL flavor on command line, in a text editor embedded
      terminal (e.g. Sublime Text, atom, VSCode, IntelliJ), with output sent through a pager. 
 
  SYNOPSIS
 
-  ${shell_name}
+  ${SHELL_NAME}
 
     [-u | --username]        cypher-shell username parameter.
     [-p | --password]        cypher-shell password parameter.
@@ -69,7 +60,7 @@ dashHelpOutput() {
 
  DESCRIPTION
 
-  ${shell_name} is a front-end wrapper to cypher-shell that executes cypher
+  ${SHELL_NAME} is a front-end wrapper to cypher-shell that executes cypher
   statements and pipes the output into the less pager with options to save
   output. There are two execution scenarios where different command line options
   can apply:
@@ -93,20 +84,20 @@ dashHelpOutput() {
 
   2) Command Line
 
-     Run cypher commands through ${shell_name} from the command line. Cypher
+     Run cypher commands through ${SHELL_NAME} from the command line. Cypher
      input can be copy / paste, direct entry via an editor or stdin, or piped in.
      The default input and editing is through stdin. It is suggested that the
      --vi option for a seamless REPL experience. External gui editors can be
      used but must be exited for the query to run. It is better to call 
-     ${shell_name} from an terminal embedded in a gui editor to get the same
+     ${SHELL_NAME} from an terminal embedded in a gui editor to get the same
      REPL experience. 
 
      Neo4j Desktop terminal provides a database compatible version of cypher-shell,
-     but you may have to use the -C | --cypher-shell parameter to tell ${shell_name}
+     but you may have to use the -C | --cypher-shell parameter to tell ${SHELL_NAME}
      where to find it.
 
   NOTE: The :use database statement does not persist across queries. Each
-        new query run will execute in the database ${shell_name} was
+        new query run will execute in the database ${SHELL_NAME} was
         started with unless a :use database statement is part of the query.
 
  OPTIONS
@@ -196,8 +187,8 @@ dashHelpOutput() {
     there are command line options needed.  For example to launch nano, atom,
     or sublime:
 
-     sublime: ${shell_name} -E 'subl --new-window --wait'
-        atom: ${shell_name} -E 'atom --new-window --wait'
+     sublime: ${SHELL_NAME} -E 'subl --new-window --wait'
+        atom: ${SHELL_NAME} -E 'atom --new-window --wait'
 
   -L | --lessOpts <'less command options'>
   
@@ -205,7 +196,7 @@ dashHelpOutput() {
     option that begin with '-' and '--' by prepending each '-' with a '\'
     backslash. E.g. for the script's --lessOpts that defines options to run the
     less pager with using the less --LINE-NUMBERS and --chop-long-lines would be 
-    submitted to ${shell_name} as:
+    submitted to ${SHELL_NAME} as:
 
        --lessOpts '\-\-LINE-NUMBERS --chop-long-lines'
 
@@ -251,7 +242,7 @@ dashHelpOutput() {
     to be cypher-shell options and are passed through to cypher-shell. An example
     of passing login information to cypher-shell, e.g:
   
-         ${shell_name} -a <ip address>
+         ${SHELL_NAME} -a <ip address>
 
  INSTALLATION
 
@@ -259,9 +250,9 @@ dashHelpOutput() {
      the Neo4j Graph Database.  Suggesting using a 4.x version of cypher-shell. Alternative is
      to use the --cypher-shell parameter to specify a cypher-shell installation to use. 
 
-  2. Download ${shell_name} from github (https://github.com/dfgitn4j/repl-cypher-shell).
+  2. Download ${SHELL_NAME} from github (https://github.com/dfgitn4j/repl-cypher-shell).
 
-  2. Make file executable (e.g. chmod 755 ${shell_name}).
+  2. Make file executable (e.g. chmod 755 ${SHELL_NAME}).
 
   3. Place in directory that is in the PATH variable. For example /usr/local/bin
      seems to be good for mac's because it's in the PATH of the Neo4j Desktop
@@ -283,9 +274,9 @@ dashHelpOutput() {
  
   1. Open an embeded terminal window, e.g. _terminus_ for _Sublime Text 3_ or _platformio-ide-terminal_.
 
-  2. Start  ${shell_name}
+  2. Start  ${SHELL_NAME}
 
-     - Highlight the  ${shell_name} line in the editor and transfer it to the terminal window through 
+     - Highlight the  ${SHELL_NAME} line in the editor and transfer it to the terminal window through 
        copy-paste-into-terminal key sequence, or just copy and paste into the terminal.
 
      - Hit Enter key in the terminal window to start the shell if needed. A user name and password will
@@ -310,11 +301,11 @@ dashHelpOutput() {
 
   COMMAND LINE (REPL kind of workflow)
 
-  1. Add  ${shell_name} in PATH if needed (e.g. /usr/local/bin)
+  1. Add  ${SHELL_NAME} in PATH if needed (e.g. /usr/local/bin)
 
-  2. Determine which cypher-shell to use and then run  ${shell_name}
+  2. Determine which cypher-shell to use and then run  ${SHELL_NAME}
     
-     a. Run  ${shell_name} in a terminal environment that has a version of cypher-shell that is 
+     a. Run  ${SHELL_NAME} in a terminal environment that has a version of cypher-shell that is 
         compatible with the database version being connected to in the PATH environment variable. 
 
      b. Use the -C | --cypher-shell command line option to specify the cypher-shell install. 
@@ -322,7 +313,7 @@ dashHelpOutput() {
         a Neo4j Desktop terminal window for the currently running database and run this command from 
         the command line prompt:
 
-        ${shell_name} --cypher-shell ./bin/cypher-shell
+        ${SHELL_NAME} --cypher-shell ./bin/cypher-shell
 
         !!! It's bad practice to work in the initial directory the shell starts
         in if in a  Neo4j Desktop launched terminal. Mistakes happen, and _any_ files
@@ -334,7 +325,7 @@ dashHelpOutput() {
 
         n4jcypshell="$(pwd)/bin/cypher-shell"
         cd ~/MyWorkingDirectory
-        ${shell_name} --cypher-shell $n4jcypshell --vi
+        ${SHELL_NAME} --cypher-shell $n4jcypshell --vi
 
 
   EXAMPLES
@@ -342,7 +333,7 @@ dashHelpOutput() {
     - Run cypher-shell with Neo4j database username provided and ask for a
       password if the NEO4J_PASSWORD environment variable is not set:
 
-        ${shell_name} -u neo4j
+        ${SHELL_NAME} -u neo4j
 
     - Use vi editor and keep an individual file for each cypher command run and save 
       cypher query and results output files:
@@ -350,9 +341,9 @@ dashHelpOutput() {
         sTrp-cypher-shell.sh --vi -u neo4j --time --saveAll
 
     - Use sublime as the editor. Expected scenario is to run
-      ${shell_name} from a terminal window *within* the gui editor:
+      ${SHELL_NAME} from a terminal window *within* the gui editor:
 
-       ${shell_name} --saveCypher -E 'subl --new-window --wait'
+       ${SHELL_NAME} --saveCypher -E 'subl --new-window --wait'
 
       See https://www.sublimetext.com/docs/3/osx_command_line.html
 
@@ -385,8 +376,7 @@ setDefaults () {
   RCODE_EMPTY_INPUT=7
   RCODE_MISSING_INPUT_FILE=8
 
-
-  vi_initial_open_opts=' +star '  # Start first exec for vi in append mode.
+  VI_INITIAL_OPEN_OPTS=' +star '  # Start first exec for vi in append mode.
 
   edit_cnt=0        # count number of queries run, controls stdin messaging.
   success_run_cnt=0 # count number of RCODE_SUCCESSful runs for file names
@@ -405,13 +395,14 @@ setDefaults () {
   TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
 
-  save_qry_file_pattern="${OUTPUT_FILES_PREFIX}.*${SESSION_ID}.*${QRY_FILE_POSTFIX}"
-  save_results_file_pattern="${OUTPUT_FILES_PREFIX}.*${SESSION_ID}.*${RESULTS_FILE_POSTFIX}"
+  SAVE_QRY_FILE_PATTERN="${OUTPUT_FILES_PREFIX}.*${SESSION_ID}.*${QRY_FILE_POSTFIX}"
+  SAVE_RESULTS_FILE_PATTERN="${OUTPUT_FILES_PREFIX}.*${SESSION_ID}.*${RESULTS_FILE_POSTFIX}"
 }
 
-# ${1} is the string to find
-# $@ remaining argumets are strings to find
+
 findStr() {
+  # ${1} is the string to find
+  
   local lookFor
   local inThis
   lookFor="${1}"
@@ -421,9 +412,9 @@ findStr() {
   return $?
 }
 
-# ${1} is valid response pattern in form of "<CR>YNQynq", <CR> defaults to Yes
-# ${2} is the  message for the user
 enterYesNoQuit() {
+  # ${1} is valid response pattern in form of "<CR>YNQynq", <CR> defaults to Yes
+  # ${2} is the  message for the user
   local valid_opts
   local msg
   local ret_code
@@ -470,8 +461,8 @@ enterYesNoQuit() {
   clear
 }
 
-# $1 is optional message
 printContinueOrExit() {
+  # $1 is optional message
   local msg=${1:-""}
   if [[ ${run_once}  == "Y" ]]; then # ctl-c; don't give option to continue
     exitShell "${cypherRetCode}"
@@ -485,11 +476,9 @@ printContinueOrExit() {
   fi
 }
 
-# Message outputs
-# Not all messages to to output, some go to tty and results file to stdout
-# $1 is message $2 is optional format string for printf
-
 messageOutput() {  # to print or not to print
+  # Not all messages to to output, some go to tty and results file to stdout
+  # $1 is message $2 is optional format string for printf
   local fmt_str=${2:-"%s\n"}
   if [[ ${quiet_output} == "N" && ${is_pipe} == "N"  ]]; then
     printf "${fmt_str}" "${1}"
@@ -512,7 +501,7 @@ outputQryRunMsg ()
     db_msg="Database: ${db_name}"
   fi
   messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${db_msg}"
-  messageOutput "        Ctl-C to terminate stdin and exit ${shell_name} without running cypher statement."
+  messageOutput "        Ctl-C to terminate stdin and exit ${SHELL_NAME} without running cypher statement."
 }
 
 # one and done cypher-shell options run
@@ -524,17 +513,17 @@ runCypherShellInfoCmd () {
 
 getOptArgs() {
 
- # getOptArgs - gets 0 or more flag options, sets a var with the vals in arg_ret_opts for a flag until next
- #  flag, and sets arg_shift_cnt as the number of options found to shift the source array
- #  and does error cking.
- #    1st param = expected number of parameters, -1 = no limit (i.e. -f abc 1 dca -a will return abc 1 dca)
- #    2nd param = error message
- #    3rd param = options passed in
- #
- #  i.e called with getOptArgs -1 "my error" "-f abc 1 dec -a" will set:
- #      arg_ret_opts="abc 1 dec"
- #      arg_shift_cnt=3
- # calling function then needs to shift it's input array by arg_shift_cnt
+  # getOptArgs - gets 0 or more flag options, sets a var with the vals in arg_ret_opts for a flag until next
+  #  flag, and sets arg_shift_cnt as the number of options found to shift the source array
+  #  and does error cking.
+  #    1st param = expected number of parameters, -1 = no limit (i.e. -f abc 1 dca -a will return abc 1 dca)
+  #    2nd param = error message
+  #    3rd param = options passed in
+  #
+  #  i.e called with getOptArgs -1 "my error" "-f abc 1 dec -a" will set:
+  #      arg_ret_opts="abc 1 dec"
+  #      arg_shift_cnt=3
+  # calling function then needs to shift it's input array by arg_shift_cnt
 
   arg_ret_opts=""  # init no options found
   arg_nbr_expected_opts="${1}"  # nbr options expected
@@ -844,10 +833,10 @@ exitCleanUp() {
     find . -maxdepth 1 -type f -empty -name "${cypherFile}"  -exec rm {} \;
   
     if [[ ${save_results} == "Y" ]]; then
-      messageOutput "**** There are $(existingFileCnt "${save_results_file_pattern}") results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+      messageOutput "**** There are $(existingFileCnt "${SAVE_RESULTS_FILE_PATTERN}") results files (${RESULTS_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
     fi
     if [[ ${save_cypher} == "Y" ]]; then
-      messageOutput "**** There are $(existingFileCnt "${save_cypher_file_pattern}") query files (${QRY_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
+      messageOutput "**** There are $(existingFileCnt "${SAVE_QRY_FILE_PATTERN}") query files (${QRY_FILE_POSTFIX}) with session id ${SESSION_ID} ****"
     fi
   else # cleanup any file from this session 
     find . -maxdepth 1 -type f -name "${cypherFile}"  -exec rm {} \;
@@ -998,9 +987,9 @@ setCypherShellCmdLine () {
 }
 
 
- # set the cypher-shell cmd line arg for db
- # either passed on cmd line, or last :use stmtn
 fmtCurrentDbCmdArg () {
+   # set the cypher-shell cmd line arg for db
+   # either passed on cmd line, or last :use stmtn
   db_cmd_arg=""
   if [[ ! -z ${db_name} ]]; then # db specified on cmd line or :use stmt
     db_cmd_arg="-d ${db_name}"
@@ -1008,9 +997,9 @@ fmtCurrentDbCmdArg () {
   fi
 }
 
- # find last :use database statement to use as the db to run next call to cypher-shell
- # provides a seamless, single session cypher-shell experience
 findColonUseStmnt () {
+  # find last :use database statement to use as the db to run next call to cypher-shell
+  # provides a seamless, single session cypher-shell experience
   # last_use_stmt=$(grep --extended-regexp --ignore-case -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?[;]{0,1}.*$' "${cypherFile}" 2>/dev/null | sed -E -e 's/[`]//g' -e "s/.*:use[ $(printf '\t')]*//" -e 's/;//' | tail -1)
   last_use_stmt=$(grep --extended-regexp --ignore-case --color=never -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?[;]{0,1}.*$' "${cypherFile}" | tail -1 | sed -E -e 's/[`]//g' -e "s/.*:use[ ]*//" -e 's/;//' )
   if [[ ! -z ${last_use_stmt} ]]; then
@@ -1022,7 +1011,7 @@ findColonUseStmnt () {
 
 cleanAndRunCypher () {
 
-  sed -i '' "/.*${shell_name}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
+  sed -i '' "/.*${SHELL_NAME}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
   
    # check to see if the cypher file is empty
   if ! grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherFile}" >/dev/null 2>&1  ; then
@@ -1088,9 +1077,8 @@ intermediateFileHandling () {
   fi
 }
 
-# input cypher text, either from pipe, editor, or stdin (usually terminal window in editor)
 getCypherText () {
-  
+  # input cypher text, either from pipe, editor, or stdin (usually terminal window in editor)
   if [[ -n ${input_cypher_file_name} && ${run_once} == "Y" ]]; then
     cat ${input_cypher_file_name} > ${cypherFile}  # run once with input file
     return
@@ -1114,13 +1102,13 @@ getCypherText () {
         ${editor_to_use} ${cypherFile}
       else # using vi
         if [[ ${edit_cnt} -eq 0 &&  -z "${input_cypher_file}" ]]; then
-          ${editor_to_use} ${vi_initial_open_opts} ${cypherFile} # open file option +star (new file)
+          ${editor_to_use} ${VI_INITIAL_OPEN_OPTS} ${cypherFile} # open file option +star (new file)
         else
           ${editor_to_use} ${cypherFile}
         fi
       fi
       # ask user if they want to run file or go back to edit
-      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) to edit, (q) to exit ${shell_name} " 
+      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) to edit, (q) to exit ${SHELL_NAME} " 
       if [[ $? -eq 1 ]]; then # answered 'n', continue
         continue  # go back to edit on same file
       else # answered yes to running query
@@ -1131,9 +1119,9 @@ getCypherText () {
   (( edit_cnt++ ))  # increment query edit count
 }
 
-# main loop for running cypher-shell until termination condition
+
 executionLoop () {
-  
+  # main loop for running cypher-shell until termination condition
   while true; do
     
      # LESS: comment this out if using less --quit-at-eof type options
@@ -1164,6 +1152,16 @@ executionLoop () {
 }
 
 # main
+### shell accomodations
+
+# for zsh to avoid having to do this for command line word split in this shell
+# args=(${user_name} ${_} ${cypherShellArgs} ${cypher_format_arg})
+# cypher-shell "${args[@]}"
+setopt SH_WORD_SPLIT >/dev/null 2>&1
+set -o pipefail
+
+SHELL_NAME=${0##*/}  # shell name must be set here to avoid zsh / bash diffs
+
 trap printContinueOrExit SIGINT 
 trap exitShell SIGHUP SIGTERM 
 

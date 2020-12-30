@@ -13,12 +13,6 @@
 # initVars - get return code variables and values from script / set script variables
 #
 
-# vars that might need to be modified 
-TEST_SHELL='../../repl-cypher-shell.sh'
-CYPHER_SHELL="$(which cypher-shell)" # change  if want to use a different cypher-shell
-PATH=${CYPHER_SHELL}:${PATH} # put testing cypher-shell first in PATH
-
-
 initVars () {
   vars=$(cat <<EOV
   $(cat ${TEST_SHELL} | sed -E -n 's/(^.*RCODE.*=[0-9]+)(.*$)/\1/p')
@@ -67,7 +61,6 @@ EOV
   runCnt=0
   successCnt=0
   errorCnt=0
-  exitOnError="N" # set to Y to stop if any runShell tests fail.
 }
 
 # ckForLeftoverOutputFiles () {
@@ -100,15 +93,20 @@ interruptShell () {
   exitShell 1
 }
 
-
 exitOnError () {
-  if [[ ${exitOnError} == "Y" ]]; then
-    printf "%s\n\n" "Encountered a testing error and stopOnError = '${exitOnError}'.  Bye."
-    rm -f ${QRY_OUTPUT_FILE} 
-    exit
+  if [[ ${EXIT_ON_ERROR} == "Y" ]]; then
+    printf "%s\n\n" "Encountered a testing error and EXIT_ON_ERROR = '${EXIT_ON_ERROR}'.  Bye."
+    # rm -f ${QRY_OUTPUT_FILE} 
+    exit 1
   fi 
 }
 
+enterToContinue () {
+  if [[ ${ENTER_TO_CONTINUE} == "Y" ]]; then
+    printf 'Enter to continue.'
+    read n
+  fi
+}
 
 existingFileCnt () {
   # 1st param is the file pattern to test
@@ -124,15 +122,8 @@ printOutput () {
          ${msg} ${exitCode} ${expectedExitCode} ${testType} \
          ${errVarNames[@]:${exitCode}:1} ${errVarNames[@]:${expectedExitCode}:1}  \
          ${usePipe} "'${callingParams}'" "'${secondErrorMsg}'" "'${desc}'" >> ${RESULTS_OUTPUT_FILE}
-
 }
 
-paramErrorExit () {
-  msg="${1}"
-  printf "Parameters:\n"
-  while (( "$#" )); do printf " '$1'\n"; shift; done 
-  exit 1
-}
 
 # runShell ()
 # meant to test the various parameter combinations at a surface level, bit of a hack
@@ -166,9 +157,10 @@ runShell () {
   desc="${8:-not provided}"
 
   if [[ $# -lt 7 ]] ; then
-    paramErrorExit "Exiting. Invalid # params to ${0}. Sent:\n(${@})\n Need at least 7, got: $#. Bye.\n"
-  #elif [[ -z "${outputFilePattern}" && -n "${grepFileContentCmd}" ]]; then 
-  #  paramErrorExit "${outputFilePattern} needs to exist if ${grepFileContentCmd} exists."
+    printf '%s\n' "Exiting. Invalid # params to ${0}. Sent:\n(${@})\n Need at least 7, got: $#."
+    printf "Parameters:\n"
+    while (( "$#" )); do printf " '$1'\n"; shift; done 
+    exit 1
   fi
 
   secondErrorMsg="" # error not triggered by an invalid return code
@@ -221,8 +213,8 @@ EOF
     updateSuccessCnt="Y"
   fi
 
-  if [[ "${updateSuccessCnt}" == "Y" && -n ${outputFilePattern} ]]; then  # clean up files
-    for rmFile in $(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" ) ; do
+  if [[ "${updateSuccessCnt}" == "Y" ]]; then  # clean up qry and results files regardless
+    for rmFile in $(find * -type f -depth 0 | grep --color=never -E "${saveAllFilePattern}" ) ; do
       rm ${rmFile}
     done 
   fi
@@ -238,26 +230,14 @@ EOF
     printOutput
     exitOnError 
   fi
+  enterToContinue
 }
-
 
 # someday write expect scripts for interactive input
 testsToRun () {
 
     # output file header
   printf "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tError Message\tDescription\n" > ${RESULTS_OUTPUT_FILE}
-
-  # set Neo4j uid / pw to a value if env vars not set
-  uid="${NEO4J_USERNAME:-neo4j}"
-  pw="${NEO4J_PASSWORD:-admin}"
-
-  NEO4J_USERNAME=${uid}
-  export NEO4J_USERNAME
-  NEO4J_PASSWORD=${pw}
-  export NEO4J_PASSWORD
-
-  exitOnError="Y"   # exit if runShell fails
-  # exitOnError="N" # continue if runShell fails
 
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "" "" 0 "" \
@@ -441,6 +421,22 @@ testsToRun () {
 #
 # MAIN
 #
+# vars that might need to be modified 
+TEST_SHELL='../../repl-cypher-shell.sh'
+CYPHER_SHELL="$(which cypher-shell)" # change  if want to use a different cypher-shell
+PATH=${CYPHER_SHELL}:${PATH} # put testing cypher-shell first in PATH
+
+# set Neo4j uid / pw to a value if env vars not set
+uid="${NEO4J_USERNAME:-neo4j}"
+pw="${NEO4J_PASSWORD:-admin}"
+NEO4J_USERNAME=${uid}
+export NEO4J_USERNAME
+NEO4J_PASSWORD=${pw}
+export NEO4J_PASSWORD
+
+EXIT_ON_ERROR="Y"   # exit if runShell fails, "N" to continue
+ENTER_TO_CONTINUE="N" # press enter to continue to next test
+
 trap interruptShell SIGINT
 
 initVars

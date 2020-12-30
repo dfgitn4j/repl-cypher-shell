@@ -1,10 +1,11 @@
 [
-	{
+    {
         "keys": ["ctrl+shift+0"],
         "command": "send_selection_to_terminus",
         "args": {
             "visible_only": "True", 
-            "add_ctl_d": false
+            "add_ctl_d": false,
+            "send_q_for_pager": false
         },
         "context": [
             { "key": "selection_empty", "operator": "equal", "operand": false },
@@ -16,7 +17,8 @@
         "command": "send_selection_to_terminus",
         "args": {
             "visible_only": "True", 
-            "add_ctl_d": true
+            "add_ctl_d": true,
+            "send_q_for_pager": false
         },
         "context": [
             { "key": "selection_empty", "operator": "equal", "operand": false },
@@ -25,7 +27,25 @@
     },
     {
         "keys": ["ctrl+shift+2"],
-        "command": "send_selections",
+        "command": "send_selection_to_terminus",
+        "args": {
+            "visible_only": "True", 
+            "add_ctl_d": false,
+            "send_q_for_pager": true
+        },
+        "context": [
+            { "key": "selection_empty", "operator": "equal", "operand": false },
+            { "key": "num_selections", "operator": "equal", "operand": 1 }
+        ]
+    },
+    {
+        "keys": ["ctrl+shift+3"],
+        "command": "send_selection_to_terminus",
+        "args": {
+            "visible_only": "True", 
+            "add_ctl_d": true,
+            "send_q_for_pager": true
+        },
         "context": [
             { "key": "selection_empty", "operator": "equal", "operand": false },
             { "key": "num_selections", "operator": "equal", "operand": 1 }
