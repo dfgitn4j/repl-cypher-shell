@@ -1,4 +1,4 @@
-# set -xv
+#set -xv
 # script to front-end cypher-shell and pass output to pager
 
 
@@ -451,14 +451,9 @@ enterYesNoQuit() {
         ;;
       esac
 
-      clear  # made a choice if did not exit
-      if [[ ! -n "${editor_to_use}" ]]; then # no header if using editor
-        outputQryRunMsg
-      fi
       return ${ret_code}
     fi
   fi
-  clear
 }
 
 printContinueOrExit() {
@@ -492,16 +487,23 @@ outputWelcomeMsg ()
     db_msg="in database ${db_name}"
   fi
   messageOutput "Using Neo4j ${db_edition:-?} version ${db_version:-?} as user ${db_username:-?} ${db_msg}" 
+  if [[ -n ${editor_to_use} ]]; then
+    sleep 2 # let user see welcome message before opening editor
+  fi
 }
 
 outputQryRunMsg ()
 {
-  local db_msg
+  local db_msg=""
   if [[  -n "${db_name}" ]]; then
     db_msg="Database: ${db_name}"
   fi
-  messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${db_msg}"
-  messageOutput "        Ctl-C to terminate stdin and exit ${SHELL_NAME} without running cypher statement."
+  if [[ ! -n "${editor_to_use}" ]]; then # header for stdin
+    messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${db_msg}"
+    messageOutput "        Ctl-C to terminate stdin and exit ${SHELL_NAME} without running cypher statement."
+  elif [[ ! -z ${db_msg} ]]; then 
+    messageOutput "==> Using ${db_msg}"
+  fi
 }
 
 # one and done cypher-shell options run
@@ -570,7 +572,8 @@ getArgs() {
   # Note: less will clear screen before user sees ouput if the quit-at-end options
   # are used. e.g. --quit-at-eof.  Look for comment with string "LESS:" in script
   # if this behavior bugs you.
-  less_options='--LONG-PROMPT --shift .05 --line-numbers'
+  #less_options=('--LONG-PROMPT' '--shift .05' '--line-numbers')
+  less_options=('--LONG-PROMPT' '--shift .01')
 
   user_name=""               # blank string by default
   user_password=""
@@ -590,7 +593,7 @@ getArgs() {
   use_params=""              # query parameter arguments
   input_cypher_file_name=""  # intput file
   use_this_cypher_shell=""   # cypher-shell to use. mostly for desktop
-  external_editor=0          # = 1 if using vi or external editor, > 1 error
+  editor_to_use=""           # launch editor command line
 
   cypherRetCode=${RCODE_SUCCESS} # cypher-shell return code
 
@@ -679,21 +682,18 @@ getArgs() {
         # editor options
       -V | --vi)
          getOptArgs 0 "$@"
-         (( external_editor++ ))
          editor_to_use="vi" 
          coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       --nano)
          getOptArgs 0 "$@"
-         (( external_editor++ ))
          editor_to_use="nano -t" 
          coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -E | --editor)
          getOptArgs -1  "$@"
-         (( external_editor++ ))
          editor_to_use="${arg_ret_opts}"
          coll_args="${coll_args} ${_currentParam}"
          shift "${arg_shift_cnt}" # go past number of params processed
@@ -780,17 +780,14 @@ getArgs() {
   if ! echo "${cypher_format_arg}" | grep -q -E ' auto | verbose | plain '; then
     messageOutput "Invalid --format option: '${cypher_format_arg}'."
     return_code=${RCODE_INVALID_FORMAT_STR}
-  elif [[ ${external_editor} -gt 1 ]]; then
-    messageOutput "Invalid command line options. Cannot specify multiple editors."
-    return_code=${RCODE_INVALID_CMD_LINE_OPTS}
-  elif [[ ${external_editor} -eq 1 && ${run_once} == "Y" ]]; then
+  elif [[ -n ${editor_to_use} && ${run_once} == "Y" ]]; then
     messageOutput "Invalid command line options.  Cannot use an editor and run once at the same time."
     return_code=${RCODE_INVALID_CMD_LINE_OPTS}
   elif [[ -n ${input_cypher_file_name} && ! -f ${input_cypher_file_name} ]]; then # missing input file
     messageOutput "File '${input_cypher_file}' with cypher query does not exist."
     return_code=${RCODE_MISSING_INPUT_FILE}
   elif [[ ${is_pipe} == "Y" ]]; then
-    if [[ ${external_editor} -gt 0 ]]; then  # could do this, but why?
+    if [[ -n ${editor_to_use} ]]; then  # could do this, but why?
       messageOutput "Cannot use external editor and pipe input at the same time."
       return_code=${RCODE_INVALID_CMD_LINE_OPTS}
     elif [[ -n ${input_cypher_file} ]]; then
@@ -941,7 +938,7 @@ runInternalCypher () {
     messageOutput ""
     messageOutput "=========="
     messageOutput "ERROR: cypher-shell generated error"
-    outputWelcomeMsg  # db version, neo4j edition, user if known
+    outputWelcomeMsg  # db version, neo4j edition, user and db if known
     messageOutput "Using this cypher-shell: ${use_this_cypher_shell}"
     messageOutput "cypher-shell return code: ${cypherRetCode}"
     messageOutput "Script started with: ${coll_args}"
@@ -1010,7 +1007,7 @@ findColonUseStmnt () {
 
 
 cleanAndRunCypher () {
-
+  clear
   sed -i '' "/.*${SHELL_NAME}.*/d" ${cypherFile}  # delete line with a call to this shell if necessary
   
    # check to see if the cypher file is empty
@@ -1029,11 +1026,11 @@ cleanAndRunCypher () {
     if [[ ${save_results}  == "Y" ]]; then
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less 
+            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less ${less_options[@]}
     else 
-        eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
+      eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less 
+            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less ${less_options[@]}
     fi
 
      # ck return code - PIPESTATUS[0] for bash, pipestatus[1] for zsh
@@ -1059,7 +1056,7 @@ intermediateFileHandling () {
   cat /dev/null > ${cypherFile} 
     # if not first time through, ck to save files, blank resultsFile
   if [[ ${edit_cnt} -ne 0 ]]; then
-    if [[ ${external_editor} -eq 1 ]]; then # use previous file if using editor
+    if [[ -n ${editor_to_use} ]]; then # use previous file if using editor
       cp ${cur_cypher_qry_file} ${cypherFile}
     fi
 
@@ -1078,11 +1075,12 @@ intermediateFileHandling () {
 }
 
 getCypherText () {
+
   # input cypher text, either from pipe, editor, or stdin (usually terminal window in editor)
   if [[ -n ${input_cypher_file_name} && ${run_once} == "Y" ]]; then
     cat ${input_cypher_file_name} > ${cypherFile}  # run once with input file
     return
-  elif [[ ${external_editor} -eq 0 ]]; then # using stdin
+  elif [[ ! -n ${editor_to_use} ]]; then # using stdin
     if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
       outputQryRunMsg # output run query header
     fi
@@ -1093,9 +1091,11 @@ getCypherText () {
       cat /dev/null > ${cypherFile}  # start clean since we're not in an editor. 
     fi
       # execute query w/o input if have input file and doing a -1 option
+    local old_ifs=${IFS}
     while IFS= read -r line; do
       printf '%s\n' "$line" >> ${cypherFile}
     done
+    IFS=${old_ifs}
   else # using external editor
     while true; do
       if [[ ${editor_to_use} != "vi" ]]; then
@@ -1108,7 +1108,9 @@ getCypherText () {
         fi
       fi
       # ask user if they want to run file or go back to edit
-      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) to edit, (q) to exit ${SHELL_NAME} " 
+      
+      outputQryRunMsg
+      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) to continue to edit, (q) to exit ${SHELL_NAME} " 
       if [[ $? -eq 1 ]]; then # answered 'n', continue
         continue  # go back to edit on same file
       else # answered yes to running query
@@ -1124,10 +1126,9 @@ executionLoop () {
   # main loop for running cypher-shell until termination condition
   while true; do
     
-     # LESS: comment this out if using less --quit-at-eof type options
-    if [[ ${edit_cnt} -gt 0 ]]; then # 0 means leave connection message
-      clear # clear the terminal
-    fi
+    #if [[ ${edit_cnt} -gt 0 ]]; then # 0 means leave connection message
+    #  clear # clear the terminal
+    #fi
 
     intermediateFileHandling  # intermediate files for cypher and output
     getCypherText  # consume input
@@ -1137,8 +1138,9 @@ executionLoop () {
     if [[ ${cypherRetCode} -eq 0 ]]; then
       # messageOutput "Finished query execution: $(date)"
       (( success_run_cnt++ ))
-      if [[ ${external_editor} -eq 1 ]]; then # don't go straight back into editor
-        printContinueOrExit "Using editor."
+      if [[ -n ${editor_to_use} ]]; then # don't go straight back into editor
+        outputQryRunMsg
+        printContinueOrExit "Using ${editor_to_use} to edit."
       fi
     elif [[ ${exit_on_error} == "Y" ]]; then # print error and exit
       exitShell ${cypherRetCode} # ERROR running cypher code
