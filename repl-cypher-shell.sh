@@ -569,11 +569,7 @@ getOptArgs() {
 getArgs() {
   # less options --shift .01 allows left arrow to only cut off beginning "|"
   # while scrolling at the expense of slower left arrow scrolling
-  # Note: less will clear screen before user sees ouput if the quit-at-end options
-  # are used. e.g. --quit-at-eof.  Look for comment with string "LESS:" in script
-  # if this behavior bugs you.
-  #less_options=('--LONG-PROMPT' '--shift .05' '--line-numbers')
-  less_options=('--LONG-PROMPT' '--shift .01')
+  less_options="--LONG-PROMPT --shift .01"
 
   user_name=""               # blank string by default
   user_password=""
@@ -929,7 +925,7 @@ runInternalCypher () {
   qry_file="${1}"
   out_file="${2}"
 
-  fmtCurrentDbCmdArg # use 'current db' for db_cmd_arg
+  fmtCurrentDbCmdArg # use 'current db' for cypher-shell command line --database opion
 
    # cypher-shell with no formatting args to be able to parse the output string
   eval "'${use_this_cypher_shell}'" "${user_name}" "${user_password}" "${db_cmd_arg}" "${cypherShellArgs}"  --format plain < "${qry_file}" > "${out_file}" 2>&1
@@ -1026,11 +1022,11 @@ cleanAndRunCypher () {
     if [[ ${save_results}  == "Y" ]]; then
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less ${less_options[@]}
+            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less ${less_options} 
     else 
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less ${less_options[@]}
+            ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less ${less_options}
     fi
 
      # ck return code - PIPESTATUS[0] for bash, pipestatus[1] for zsh
