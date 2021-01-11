@@ -52,6 +52,12 @@
         ]
     },
     {
+        "keys": ["ctrl+fn+o"], "command": "terminus_open", "args": {
+            "cwd": "${file_path:${folder}}",
+            "panel_name": "repl-cypher-shell"
+        }
+    },
+    {
         "keys": ["ctrl+p"], "command": "terminus_open", "args": {
             "cwd": "${file_path:${folder}}",
             "panel_name": "Terminus"
@@ -60,7 +66,7 @@
     {
         "keys": ["ctrl+t"], "command": "terminus_open", "args": {
             "cwd": "${file_path:${folder}}"
-    	}
+        }
     },
     {
          "keys": ["ctrl+shift+t"], "command": "terminus_close", 

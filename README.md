@@ -27,7 +27,8 @@
     </tr>
 </table>
 
-
+Sublime resource: https://github.com/cskardon/sublime-cypher  
+kept only Cypher.tmLanguage file
 ## _Why?_
  
 #### Two Reasons:
