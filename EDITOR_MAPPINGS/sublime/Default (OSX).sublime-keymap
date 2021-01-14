@@ -3,8 +3,7 @@
         "keys": ["ctrl+shift+0"],
         "command": "send_selection_to_terminus",
         "args": {
-            "visible_only": "True", 
-            "add_ctl_d": false,
+            "visible_only": "True", "add_ctl_d": false,
             "send_q_for_pager": false
         },
         "context": [

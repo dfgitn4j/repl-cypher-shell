@@ -1,6 +1,6 @@
 # Simple Frontend Shell  To Improve The Usability of Neo4j's `cypher-shell` command line tool
 
-> - Run Cypher queries easily from within an editor, such as _Sublime Text 3_, _Atom_, _VSCode_, _IntelliJ_, or any other editor that supports embedded terminals.
+> - Highlight and run Cypher queries using cypher-shell within an editor, such as _Sublime Text 3_, _Atom_, _VSCode_, _IntelliJ_, or any other editor that supports embedded terminals.
 > - As a command line REPL interface to cypher-shell, including in a terminal window started from `Neo4j Desktop`
 
 -----
@@ -31,54 +31,55 @@ Sublime resource: https://github.com/cskardon/sublime-cypher
 kept only Cypher.tmLanguage file
 ## _Why?_
  
-#### Two Reasons:
+#### Three Reasons:
 
   1. I find it more efficient to write complex Cypher queries in an editor and wanted a mechanism to 
      just highlight my query and run it and page through the text output. 
 
-  2. cypher-shell is one of the best ways to test query performance without messing with drivers and your
-     own code. Often the query I write is fast, but it returns too much data for the Neo4j Browser to render in a 
+  2. cypher-shell is one of the best ways to test query performance without writing code. 
+     Often the query I write is fast, but it returns too much data for the Neo4j Browser to render in a 
      reasonable amount of time. The Neo4j Browser is an [electronjs](https://www.electronjs.org/) based web 
-     and there's only so much a web browser can do. There's always Neo4j Bloom to 
+     app that has processing limits that can crossed by the volume of data a query returns. There's always Neo4j Bloom to 
      visualize large sets of data, but its functionality is not targeted at the development workflow scenario 
-     I am looking for. 
+     I am looking for and it only runs with the Neo4j Enterprise version. 
 
-  3. git  Need I say more?  You're only working with text files.  So, yeah. 
+  3. **git**  Need I say more?  You're only working with text files.  So, yeah. 
 
    ... And C.<p></p>
-     &nbsp;&nbsp;&nbsp;... Most of the code for `repl-cypher-shell.sh` was already built for another database command line tool for a project long ago and far away. I think you can tell from the style. The last sentence is my way of apologizing for this being a shell script that should've been done in Go or Python. OK.  Four reasons.
+     &nbsp;&nbsp;&nbsp;... Most of the code for `repl-cypher-shell.sh` was already built for another database command line tool for a project long ago and far away. 
+     I mean who would write something like this with shell scripting these days? OK. Four reasons.
 
 
 #### `repl-cypher-shell.sh` allows you to:
  
  - Write and run cypher queries using `cypher-shell` within your favorite gui editor that supports
-   embedded terminal functionality.  Almost all do, I've used `repl-cypher-shell.sh` in _Sublime Text 3_, _Atom_, 
-   _VSCode_ and _IntelliJ_.  
+   embedded terminal functionality.  Almost all do. I've used `repl-cypher-shell.sh` in _Sublime Text 3_, _Atom_, 
+   _VSCode_ and _IntelliJ_. Though I switched to Sublime Text 3_from Atom a while back because Sublime has more 
+   functionality than Atom, and Atom has issues with large cut and paste to a terminal and has not been 
+   supported for sometime.
 
  - Provide a Cypher query development and runtime enviroment avoids the overhead of the Neo4j Browser and return 
    data in the form dictated by the Cypher query.
 
- - Provide a REPL enviroment and controlled output when running from the command line without a gui editor. This includes 
-   output managed by a pager instead of sending all output to the screen as it does if you're working within the cypher-shell.
+ - Provide a REPL enviroment and controlled output when running from the command line without a gui by:
+   1. Read (through an editor such as nano or vi)
+   2. Evaluate (run query through cypher-shell)
+   3. Print (cypher-shell output to pager, with optional save query and output to file)
+   4. Loop (go back to step 1)
 
  - Be able to save executed queries and output automatically. 
    
- - Use the above functinoalty with an installation of `cypher-shell` detached from the Desktop Neo4j environment or the server. 
-   The detached environment is how I use `repl-cypher-shell.sh.sh` day-to-day. .  
+ - Use the above functionality as a client installation of `cypher-shell` detached from the Desktop Neo4j environment or the server.  
    
 ## _Is It Overkill? :eyes:_
 
  Maybe. But `repl-cypher-shell.sh` offers a way to execute Cypher queries from
- within GUI tools I use in a REPL style workflow. There's also times
+ within GUI tools using a REPL style workflow. There's also times
  where I wanted a REPL and controlled output environment when running
  `cypher-shell` from the  command line.  You can always run `cypher-shell` from
- a terminal pipe output to a pager, but that is a rough REPL enviroment. I
- prefer the highlight or paste and go method, or running in a command line cycle
- through this workflow:
+ a terminal pipe output to a pager, but that is a rough REPL enviroment. I prefer
+ to stay in the REPL workflow if I running in a terminal and using an editor
 
-  vi or emacs to edit cypher query :point_right: save query and exit vi :point_right: run query in cypher-shell :point_right: view output in pager :point_right: return to vi  :metal:
-
- That's all good, but to me, the main value of `repl-cypher-shell.sh` comes from using within editors such as _Sublime Text_, _VSCode_, _Atom_, etc. to send cypher queries to an embedded terminal window to be run repeatedly.
  
 ## _Installation_
 
@@ -107,7 +108,7 @@ environment created when you create a Neo4j database using the `Neo4j Desktop`.
 
 1. Download `repl-cypher-shell.sh`.
 
-2. Make file executable (e.g. `chmod 744 repl-cypher-shell.sh`).
+2. Make file executable (e.g. `chmod 755 repl-cypher-shell.sh`).
 
 3. Place in directory that is in the PATH variable. For example /usr/local/bin
    seems to be good for mac's because it's in the PATH of the `Neo4j Desktop`
