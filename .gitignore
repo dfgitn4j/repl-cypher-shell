@@ -1,0 +1,9 @@
+SCRATCH/
+.idea
+.DS_Store
+qry*.cypher
+qry*.txt
+*.swp
+.repl-cypher*sublime*
+*.tgz
+*.out
