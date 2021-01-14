@@ -4,6 +4,7 @@
 > - As a command line REPL interface to cypher-shell, including in a terminal window started from `Neo4j Desktop`
 
 -----
+
 <table>
     <tr>
         <th><b>Sublime Text 3</b></th>
