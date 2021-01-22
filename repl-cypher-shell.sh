@@ -569,7 +569,7 @@ getOptArgs() {
 getArgs() {
   # less options --shift .01 allows left arrow to only cut off beginning "|"
   # while scrolling at the expense of slower left arrow scrolling
-  less_options="--LONG-PROMPT --shift .01"
+  less_options="--LONG-PROMPT --shift .005"
 
   user_name=""               # blank string by default
   user_password=""
