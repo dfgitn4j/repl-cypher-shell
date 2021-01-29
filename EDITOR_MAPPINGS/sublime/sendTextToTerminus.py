@@ -23,5 +23,5 @@ class SendSelectionToTerminusCommand(sublime_plugin.TextCommand):
          "tag": tag,
          "visible_only": visible_only
          })
-        self.view.window().run_command("toggle_terminus_panel")
+#        self.view.window().run_command("toggle_terminus_panel")
 

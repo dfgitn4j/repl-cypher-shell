@@ -16,33 +16,35 @@ usage() {
  SYNOPSIS
 
   ${SHELL_NAME}
-
-    [-u | --username]        cypher-shell username parameter.
-    [-p | --password]        cypher-shell password parameter.
-    [-C | --cypher-shell]    path to cypher-shell executable to be used. Run --help for how to use.
-    [-P | --param]           cypher-shell -P | --param strings. Run --help for how to use.
-    [-f | --file]            cypher-shell -f | --file containing query. Run --help for how to use.
-    [--format]               cypher-shell --format option.query results files
+    
+    ** Query output save options
 
     [-A | --saveAll]         save cypher query and output results files.
+    [-R | --saveResults]     save each query output in a file. 
     [-S | --saveCypher]      save each query statement in a file.
-    [-R | --saveResults]     save each query output in a file.
-    [-V | --vi]              use vi editor.
-    [--nano]                Use nano editor started with 'nano -t' flag.
+
+    ** Editor options to use when running from command line
+
     [-E | --editor] [cmd]    use external editor. Run --help for how to use.
-    [-L | --lessOpts] [opts] use these less pager options instead of defaults.
+    [--nano]                 Use nano editor started with 'nano -t' flag.
+    [-V | --vi]              use vi editor.
 
-    [-t | --time]            output query start time.
+    ** Runtime options
+
+    [-C | --cypher-shell]    path to cypher-shell to use.
     [-c | --showCmdLn]       show script command line args in output.
+    [-i | --incCypher]       include cypher query at begining of output.
+    [-I | --incCypherAsCmnt] include commented cypher query at beginning of output.
+    [-L | --lessOpts] [opts] use these less pager options instead of defaults.  
+    [-N | --noLogin]         login to Neo4j database not required. 
     [-q | --quiet]           no informational output messages.
-
+    [-t | --time]            output query start time.
     [-1 | --one]             run query execution loop only once and exit.
-    [-N | --noLogin]         login to Neo4j database not required.
     [-X | --exitOnError]     exit script on error.
 
+    ** Usage
+
     [-U | --usage]           command line parameter usage only.
-    [-v | --version]         cypher-shell display version and exit.
-    [--driver-version]       cypher-shell display driver version and exit.
     [-h | --help]            detailed help message.
 
     [*] ANY other parameters are passed through as is to cypher-shell.
@@ -581,10 +583,12 @@ getArgs() {
   save_cypher="N"            # save each query in own file
   save_results="N"           # save each query output in own file
   show_cmd_line="N"          # show command line args in output
+  inc_cypher="N"             # output query before results output
+  inc_cypher_as_comment="N"  # output commented query before results output
   cmd_arg_msg=""             # string to for command line arguments in output $show_cmd_line="Y"
   qry_start_time="N"               # time between query submit to cypher-shell and return
   quiet_output="N"           # no messages or prompts
-  cypherShellInfoArg=""      # any info flags passed: -v | --version | --driver-version
+  cypher_shell_info_arg=""      # any info flags passed: -v | --version | --driver-version
   coll_args=""               # all argumnents passed to script
   use_params=""              # query parameter arguments
   input_cypher_file_name=""  # intput file
@@ -596,6 +600,7 @@ getArgs() {
   while [ ${#@} -gt 0 ]
   do
      case ${1} in
+       # Intercepted cypher-shell args that may require interaction with shell, or to capture values
        # -u, -p, -P and --format are cypher-shell arguments that may affect
        # how cypher-shell is called
        # string parameters vals are in in double quotes: --param 'id => "Z4485661"'
@@ -611,18 +616,12 @@ getArgs() {
          coll_args="${coll_args} ${user_password}"
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
-      -C | --cypher-shell ) # username to connect as.
-         getOptArgs 1  "$@"
-         use_this_cypher_shell="${arg_ret_opts}"
-         coll_args="${coll_args} ${use_this_cypher_shell}"
-         shift "${arg_shift_cnt}" # go past number of params processed
-         ;;
-
-         # intercepted cypher-shell args
-      -P | --param)
-         getOptArgs 1  "$@"
-         use_params="${use_params} ${_currentParam} '${arg_ret_opts}'"
-         coll_args="${coll_args} ${use_params}"
+      -d | --database) 
+           # intercept cypher-shell -d DATABASE parameter. Used to determine
+           # which db to run query in based on last command line or last :use command
+         getOptArgs 1 "$@"
+         db_name="${arg_ret_opts}"
+         coll_args="${coll_args} ${db_name}"
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -f | --file ) # cypher file name
@@ -639,34 +638,25 @@ getArgs() {
          shift "${arg_shift_cnt}" # go past number of params processed
          coll_args="${coll_args} ${cypher_format_arg}"
          ;;
-      -d | --database) 
-           # intercept cypher-shell -d DATABASE parameter. Used to determine
-           # which db to run query in based on last command line or last :use command
-         getOptArgs 1 "$@"
-         db_name="${arg_ret_opts}"
-         coll_args="${coll_args} ${db_name}"
+      -P | --param)
+         getOptArgs 1  "$@"
+         use_params="${use_params} ${_currentParam} '${arg_ret_opts}'"
+         coll_args="${coll_args} ${use_params}"
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
-        # one and done cyphe-shell command line options
-      -v | --version | --driver-version) # 
+      -v | --version | --driver-version) # one and done cyphe-shell info options 
          getOptArgs 0 "$@"
-         cypherShellInfoArg=${_currentParam}
+         cypher_shell_info_arg="${_currentParam} ${cypher_shell_info_arg}"
          shift "${arg_shift_cnt}"
          ;;
 
-        # begin shell specific options
-        # save optoins
+      # begin repl-cypher-shell specific options
+        # save options
       -A | --saveAll) # keep cypher queries and output results files.
          getOptArgs 0 "$@"
          save_cypher="Y"
          save_results="Y"
          coll_args="${coll_args} ${_currentParam}"
-         shift "${arg_shift_cnt}" # go past number of params processed
-         ;;
-      -S | --saveCypher) # keep the cypher queries around for future use.
-         getOptArgs 0 "$@"
-         save_cypher="Y"
-         coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -R | --saveResults) # keep the cypher queries around for future use.
@@ -675,11 +665,18 @@ getArgs() {
          coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
-        # editor options
-      -V | --vi)
+      -S | --saveCypher) # keep the cypher queries around for future use.
          getOptArgs 0 "$@"
-         editor_to_use="vi" 
+         save_cypher="Y"
          coll_args="${coll_args} ${_currentParam} "
+         shift "${arg_shift_cnt}" # go past number of params processed
+         ;;
+
+        # editor options
+      -E | --editor)
+         getOptArgs -1  "$@"
+         editor_to_use="${arg_ret_opts}"
+         coll_args="${coll_args} ${_currentParam}"
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       --nano)
@@ -688,21 +685,18 @@ getArgs() {
          coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
-      -E | --editor)
-         getOptArgs -1  "$@"
-         editor_to_use="${arg_ret_opts}"
-         coll_args="${coll_args} ${_currentParam}"
+      -V | --vi)
+         getOptArgs 0 "$@"
+         editor_to_use="vi" 
+         coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
-          # run options
-          # override default less options
-          # '-' and '--' command line options for less must have '-' prepended
-          # with a backslash e.g. -L '\-\-line-numbers'
-      -L | --lessOpts )
-         getOptArgs -1 "$@"
-         less_options="${arg_ret_opts}"
-         less_options=$(echo ${arg_ret_opts} | sed -e 's/\\//g') # remove '\' from '\-'
-         coll_args="${coll_args} ${_currentParam} ${arg_ret_opts}"
+
+        # run options
+      -C | --cypher-shell ) # path to cypher-shell to use
+         getOptArgs 1  "$@"
+         use_this_cypher_shell="${arg_ret_opts}"
+         coll_args="${coll_args} ${use_this_cypher_shell}"
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -c | --showCmdLn ) # show command line args in output
@@ -711,9 +705,30 @@ getArgs() {
          coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
-      -t | --time) # print time query started
+      -i | --incCypher ) # output commented query at beginning of output
          getOptArgs 0 "$@"
-         qry_start_time="Y"
+         inc_cypher="Y"
+         coll_args="${coll_args} ${_currentParam} "
+         shift "${arg_shift_cnt}" # go past number of params processed
+         ;;
+      -I | --incCypherAsCmnt ) # output commented query at beginning of output
+         getOptArgs 0 "$@"
+         inc_cypher_as_comment="Y"
+         coll_args="${coll_args} ${_currentParam} "
+         shift "${arg_shift_cnt}" # go past number of params processed
+         ;;
+      -L | --lessOpts ) # override default less options
+         getOptArgs -1 "$@"
+         less_options="${arg_ret_opts}"
+          # '-' and '--' command line options for less must have '-' prepended
+          # with a backslash e.g. -L '\-\-line-numbers'
+         less_options=$(echo ${arg_ret_opts} | sed -e 's/\\//g') # remove '\' from '\-'
+         coll_args="${coll_args} ${_currentParam} ${arg_ret_opts}"
+         shift "${arg_shift_cnt}" # go past number of params processed
+         ;;
+      -N | --noLogin) # flag to say don't need login prompt
+         getOptArgs 0 "$@"
+         no_login_needed="Y"
          coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
@@ -723,15 +738,9 @@ getArgs() {
          coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
-      -1 | --one) # run query execution loop only once
+      -t | --time) # print time query started
          getOptArgs 0 "$@"
-         run_once="Y"
-         coll_args="${coll_args} ${_currentParam} "
-         shift "${arg_shift_cnt}" # go past number of params processed
-         ;;
-      -N | --noLogin) # flag to say don't need login prompt
-         getOptArgs 0 "$@"
-         no_login_needed="Y"
+         qry_start_time="Y"
          coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
@@ -741,6 +750,14 @@ getArgs() {
          coll_args="${coll_args} ${_currentParam} "
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
+      -1 | --one) # run query execution loop only once
+         getOptArgs 0 "$@"
+         run_once="Y"
+         coll_args="${coll_args} ${_currentParam} "
+         shift "${arg_shift_cnt}" # go past number of params processed
+         ;;
+
+        # help options
       -h | --help)
          dashHelpOutput
          exitShell ${RCODE_SUCCESS}
@@ -749,11 +766,12 @@ getArgs() {
         usage
         exitShell ${RCODE_SUCCESS}
         ;;
-        # treat everything elase as cypher-shell commands.  cypher-shell call
-        # will have to check for invalid arguments
+
       "")
          break # done with loop
          ;;
+
+        # treat everything elase as cypher-shell commands.  cypher-shell call
       *)
          getOptArgs -1 "$@"
          cypherShellArgs="${cypherShellArgs} ${_currentParam} ${arg_ret_opts}"
@@ -768,8 +786,9 @@ getArgs() {
   # coll_args="${coll_args} ${use_params}"
 
   # first ck if have a one-and-done argument
-  if [[ -n ${cypherShellInfoArg} ]]; then
-    runCypherShellInfoCmd "${cypherShellInfoArg}" # run info cmd and exit
+
+  if [[ -n ${cypher_shell_info_arg} ]]; then
+    runCypherShellInfoCmd ${cypher_shell_info_arg} # run info cmd and exit
   fi
    # parameter checks.  well, kinda
   return_code=${RCODE_SUCCESS} 
@@ -1022,10 +1041,15 @@ cleanAndRunCypher () {
     if [[ ${save_results}  == "Y" ]]; then
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
+            [[ ${inc_cypher} == "Y" ]] && cat ${cypherFile};  \
+            if [[ ${inc_cypher} == "Y" ]];then cat ${cypherFile}; printf '\n'; fi;  \
+            if [[ ${inc_cypher_as_comment} == "Y" ]];then sed -e 's/^/\/\/ /' ${cypherFile}; printf '\n'; fi;  \
             ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | tee  ${resultsFile} | less ${less_options} 
     else 
       eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
             [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
+            if [[ ${inc_cypher} == "Y" ]];then cat ${cypherFile}; printf '\n'; fi;  \
+            if [[ ${inc_cypher_as_comment} == "Y" ]];then sed -e 's/^/\/\/ /' ${cypherFile}; printf '\n'; fi;  \
             ${cypher_shell_cmd_line} < ${cypherFile}  2>&1" | less ${less_options}
     fi
 
@@ -1038,7 +1062,7 @@ cleanAndRunCypher () {
     fi
   fi
 }
-
+echo \""$(printf -- ">>%4d\n" 1)"\"
 generateFileNames () {
   (( file_nbr++ )) # increment file nbr if saving files
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
@@ -1103,9 +1127,8 @@ getCypherText () {
           ${editor_to_use} ${cypherFile}
         fi
       fi
-      # ask user if they want to run file or go back to edit
-      
-      outputQryRunMsg
+
+      outputQryRunMsg  # ask user if they want to run file or go back to edit
       enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) to continue to edit, (q) to exit ${SHELL_NAME} " 
       if [[ $? -eq 1 ]]; then # answered 'n', continue
         continue  # go back to edit on same file

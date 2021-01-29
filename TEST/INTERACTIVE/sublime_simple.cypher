@@ -1,17 +1,15 @@
-./repl-cypher-shell.sh --time  -u  neo4j
-
-// Terminus package is used for output
+// Terminus package is used for to run the repl-cypher-shell.sh frontend
  // send selected text to terminal and run key sequence is mapped
  // to the ctl-enter key combination
 
-// Some comment that explains what this query does
- // can...
- // ... be
- // ......very
- // .........long
+ repl-cypher-shell.sh  -u  neo4j
+
+// movies query - less example
+
 MATCH path=(:Person)-[:ACTED_IN]->()<-[:DIRECTED]-(:Person) RETURN path
 
-// Get label frequencies
+// Get label frequencies past query w/o expansion is possible
+
 CALL db.labels() YIELD label
   CALL apoc.cypher.run('MATCH (:`'+label+'`) RETURN count(*) as label_count',{})
   YIELD value
@@ -22,3 +20,7 @@ CALL db.labels() YIELD label
       RETURN label AS nodeLabel, label_count AS count,
       round(relFreq*factor)/factor AS relativeFrequency 
       ORDER BY label_count DESC;
+
+// blg example - less example
+  :use neo4j;
+  MATCH path=()-[*]->() RETURN path
