@@ -14,3 +14,5 @@ ctl-D terminates stdin to run the query when in interactive mode.
 **Default (OSX).sublime-keymap**
 
 Map sublime key sequence to for sendTextToTerminus.py
+
+/Users/danflavin/Library/Application Support/Sublime Text 3/Packages/User

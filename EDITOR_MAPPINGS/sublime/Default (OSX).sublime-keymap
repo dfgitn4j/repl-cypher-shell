@@ -1,85 +1,134 @@
 [
-    {
-        "keys": ["ctrl+shift+0"],
-        "command": "send_selection_to_terminus",
-        "args": {
-            "visible_only": "True", 
-            "add_ctl_d": false,
-            "send_q_for_pager": false
-        },
-        "context": [
-            { "key": "selection_empty", "operator": "equal", "operand": false },
-            { "key": "num_selections", "operator": "equal", "operand": 1 }
-        ]
-    },
-    {
-        "keys": ["ctrl+shift+1"],
-        "command": "send_selection_to_terminus",
-        "args": {
-            "visible_only": "True", 
-            "add_ctl_d": true,
-            "send_q_for_pager": false
-        },
-        "context": [
-            { "key": "selection_empty", "operator": "equal", "operand": false },
-            { "key": "num_selections", "operator": "equal", "operand": 1 }
-        ]
-    },
-    {
-        "keys": ["ctrl+shift+2"],
-        "command": "send_selection_to_terminus",
-        "args": {
-            "visible_only": "True", 
-            "add_ctl_d": false,
-            "send_q_for_pager": true
-        },
-        "context": [
-            { "key": "selection_empty", "operator": "equal", "operand": false },
-            { "key": "num_selections", "operator": "equal", "operand": 1 }
-        ]
-    },
-    {
-        "keys": ["ctrl+shift+3"],
-        "command": "send_selection_to_terminus",
-        "args": {
-            "visible_only": "True", 
-            "add_ctl_d": true,
-            "send_q_for_pager": true
-        },
-        "context": [
-            { "key": "selection_empty", "operator": "equal", "operand": false },
-            { "key": "num_selections", "operator": "equal", "operand": 1 }
-        ]
-    },
-    {
-        "keys": ["ctrl+fn+o"], "command": "terminus_open", "args": {
-            "cwd": "${file_path:${folder}}",
-            "panel_name": "repl-cypher-shell"
-        }
-    },
-    {
-        "keys": ["ctrl+p"], "command": "terminus_open", "args": {
-            "cwd": "${file_path:${folder}}",
-            "panel_name": "Terminus"
-        }
-    },
-    {
-        "keys": ["ctrl+t"], "command": "terminus_open", "args": {
-            "cwd": "${file_path:${folder}}"
-        }
-    },
-    {
-         "keys": ["ctrl+shift+t"], "command": "terminus_close", 
-           "context": [{ "key": "terminus_view"}]
-    },
-    { 
-        "keys": ["shift+escape"], 
-        "command": "show_panel", 
-        "args": {"panel": "Terminus"},
-        "context": [
-            {"key": "terminus_view.exec_panel_exists", "operand": true},
-            {"key": "terminus_view.exec_panel_visible", "operand": true}
-        ]
+  { 
+    "keys": ["alt+`"], "command": "toggle_terminus_panel"
+  },
+  { 
+    "keys": ["ctrl+w"], "command": "terminus_close", 
+    "context": [{ "key": "terminus_view"}]
+  },
+  {
+    "keys": ["ctrl+shift+p"], "command": "terminus_open", "args": {
+      "cwd": "${file_path:${folder}}",
+      "panel_name": "Terminus"
     }
+  },
+  {
+    "keys": ["ctrl+p"], 
+    "command": "terminus_open", 
+    "args": {
+      "cwd": "${file_path:${folder}}",
+      "panel_name": "rcp-p",
+      "tag": "rcp-p",
+      "auto_close": true
+    }
+  },
+  {
+    "keys": ["ctrl+alt+p"], 
+    "command": "terminus_close", 
+    "context": [
+      { "key": "terminus_view.tag", "operator": "equal", "operand": "rcp-p"}
+    ]
+  },
+  {
+    "keys": ["ctrl+1"],
+    "command": "send_selection_to_terminus",
+    "args": {
+      "tag": "rcp-p",
+      "send_q_for_pager": false,
+      "add_ctl_d": false
+    },
+    "context": [
+      { "key": "selection_empty", "operator": "equal", "operand": false },
+      { "key": "num_selections", "operator": "equal", "operand": 1 }
+    ]
+  },
+  {
+    "keys": ["ctrl+2"],
+    "command": "send_selection_to_terminus",
+    "args": {
+      "tag": "rcp-p",
+      "send_q_for_pager": false,
+      "add_ctl_d": true
+    },
+    "context": [
+      { "key": "selection_empty", "operator": "equal", "operand": false },
+      { "key": "num_selections", "operator": "equal", "operand": 1 }
+    ]
+  },
+  {
+    "keys": ["ctrl+3"],
+    "command": "send_selection_to_terminus",
+    "args": {
+      "tag": "rcp-p",
+      "send_q_for_pager": true,
+      "add_ctl_d": true
+    },
+    "context": [
+      { "key": "selection_empty", "operator": "equal", "operand": false },
+      { "key": "num_selections", "operator": "equal", "operand": 1 }
+    ]
+  },
 
+  {
+    "keys": ["ctrl+shift+t"], "command": "terminus_open", "args": {
+      "cwd": "${file_path:${folder}}",
+      "title": "Terminus"
+    }
+  },
+  {
+    "keys": ["ctrl+t"], 
+    "command": "terminus_open", 
+    "args": {
+      "cwd": "${file_path:${folder}}",
+      "tag": "rcp-t",
+      "title": "repl-cypher-shell",
+      "auto_close": true
+    }
+  },
+  {
+    "keys": ["ctrl+alt+t"], 
+    "command": "terminus_close", 
+    "context": [
+      { "key": "terminus_view.tag", "operator": "equal", "operand": "rcp-t"}
+    ]
+  },
+  {
+    "keys": ["ctrl+shift+1"],
+    "command": "send_selection_to_terminus",
+    "args": {
+      "tag": "rcp-t",
+      "send_q_for_pager": false,
+      "add_ctl_d": false
+    },
+    "context": [
+      { "key": "selection_empty", "operator": "equal", "operand": false },
+      { "key": "num_selections", "operator": "equal", "operand": 1 }
+    ]
+  },
+  {
+    "keys": ["ctrl+shift+2"],
+    "command": "send_selection_to_terminus",
+    "args": {
+      "tag": "rcp-t",
+      "send_q_for_pager": false,
+      "add_ctl_d": true
+    },
+    "context": [
+      { "key": "selection_empty", "operator": "equal", "operand": false },
+      { "key": "num_selections", "operator": "equal", "operand": 1 }
+    ]
+  },
+  {
+    "keys": ["ctrl+shift+3"],
+    "command": "send_selection_to_terminus",
+    "args": {
+      "tag": "rcp-t",
+      "send_q_for_pager": true,
+      "add_ctl_d": true
+    },
+    "context": [
+      { "key": "selection_empty", "operator": "equal", "operand": false },
+      { "key": "num_selections", "operator": "equal", "operand": 1 }
+    ]
+  }
 ]    

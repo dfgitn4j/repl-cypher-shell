@@ -1,13 +1,12 @@
 import sublime
 import sublime_plugin
-
 # how to add command tutorial: https://www.youtube.com/watch?v=lBgDilqulxg&feature=youtu.be
 # add in sublime root install Packages/User directory 
 class SendSelectionToTerminusCommand(sublime_plugin.TextCommand):
     """
     Extract the contents of the first selection and send it to Terminus.
     """
-    def run(self, edit, tag=None, visible_only=True, add_ctl_d=True, send_q_for_pager=False):
+    def run(self, edit, tag=None, send_q_for_pager=False, add_ctl_d=True):
         if add_ctl_d :
             term_string='\n\x04'
         else :
@@ -18,10 +17,11 @@ class SendSelectionToTerminusCommand(sublime_plugin.TextCommand):
         else :
             q_string='\n'
 
-        self.view.window().run_command("terminus_send_string", {
-         "string": q_string + self.view.substr(self.view.sel()[0]) + term_string,
-         "tag": tag,
-         "visible_only": visible_only
-         })
-#        self.view.window().run_command("toggle_terminus_panel")
-
+        self.view.window().run_command(
+            "terminus_send_string", 
+            {
+              "string": q_string + self.view.substr(self.view.sel()[0]) + term_string,
+              "tag": tag
+            }
+        )
+        self.view.window().run_command("toggle_terminus_panel")
