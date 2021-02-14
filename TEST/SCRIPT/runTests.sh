@@ -1,4 +1,4 @@
-#set -xv
+# set -xv
 # test parameters in script.  Simpler than using expect
 #
 # Run with one parameter will return the variables used as exit codes in the 
@@ -169,15 +169,16 @@ runShell () {
   printf "%02d. " $(( ++runCnt ))  # screen output count
 
   if [[ ${testType} == "STDIN" ]]; then
-    eval zsh ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 2>/dev/null <<EOF
+    eval bash ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 2>/dev/null <<EOF
     ${testQry}
 EOF
-  exitCode=$?
+    exitCode=$?
+
   elif [[ ${testType} == "PIPE" ]]; then
-    echo ${testQry} | eval zsh ${TEST_SHELL} ${callingParams} >${QRY_OUTPUT_FILE} 
+    echo ${testQry} | eval bash ${TEST_SHELL} ${callingParams} >${QRY_OUTPUT_FILE} 
     exitCode=$?
   elif [[ ${testType} == "FILE" ]]; then # expecting -f <filename> parameter
-    zsh ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 
+    bash ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 
     exitCode=$?
   else
     # printf "Exiting. Invalid testType specification: '${testType}' Valid entries are STDIN, PIPE, FILE.\n"
@@ -235,6 +236,7 @@ EOF
 
 # someday write expect scripts for interactive input
 testsToRun () {
+  EXIT_ON_ERROR="Y"
 
     # output file header
   printf "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tError Message\tDescription\n" > ${RESULTS_OUTPUT_FILE}

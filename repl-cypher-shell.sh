@@ -1053,8 +1053,8 @@ fmtCurrentDbCmdArg () {
 findColonUseStmnt () {
   # find last :use database statement to use as the db to run next call to cypher-shell
   # provides a seamless, single session cypher-shell experience
-  # last_use_stmt=$(grep --extended-regexp --ignore-case -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?[;]{0,1}.*$' "${cypherRunFile}" 2>/dev/null | sed -E -e 's/[`]//g' -e "s/.*:use[ $(printf '\t')]*//" -e 's/;//' | tail -1)
-  last_use_stmt=$(grep --extended-regexp --ignore-case --color=never -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?[;]{0,1}.*$' "${cypherRunFile}" | tail -1 | sed -E -e 's/[`]//g' -e "s/.*:use[ ]*//" -e 's/;//' )
+  # last_use_stmt=$(grep --extended-regexp --ignore-case -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?[;]{0,1}.*$' "${cypherEditFile}" 2>/dev/null | sed -E -e 's/[`]//g' -e "s/.*:use[ $(printf '\t')]*//" -e 's/;//' | tail -1)
+  last_use_stmt=$(grep --extended-regexp --ignore-case --color=never -e ':use\s+[`]?[a-zA-z][a-zA-z0-9.-]{2,62}[`]?[;]{0,1}.*$' "${cypherEditFile}" | tail -1 | sed -E -e 's/[`]//g' -e "s/.*:use[ ]*//" -e 's/;//' )
   if [[ ! -z ${last_use_stmt} ]]; then
     db_name="${last_use_stmt}"
     fmtCurrentDbCmdArg
@@ -1065,18 +1065,18 @@ findColonUseStmnt () {
 cleanAndRunCypher () {
   clear
   
-  if [[ ! -f ${cypherRunFile} ]]; then # did not write 1st file with editor
+  if [[ ! -f ${cypherEditFile} ]]; then # did not write 1st file with editor
     contOrExitOnEmptyFile
   else
-    sed -i '' "/.*${SHELL_NAME}.*/d" ${cypherRunFile}  # delete line with a call to this shell if necessary
+    sed -i '' "/.*${SHELL_NAME}.*/d" ${cypherEditFile}  # delete line with a call to this shell if necessary
     # check to see if the cypher file is empty
-    if ! grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherRunFile}" >/dev/null 2>&1  ; then
+    if ! grep --extended-regexp --quiet -e '[^[:space:]]' "${cypherEditFile}" >/dev/null 2>&1  ; then
       contOrExitOnEmptyFile
     else
        # add semicolon to end of file if not there.  need it for cypher to run
-      if ! sed '1!G;h;$!d' ${cypherRunFile} | awk 'NF{print;exit}' | grep --extended-regexp --quiet '^.*;\s*$|;\s*//.*$'; then
-        # printf "%s" ";" >> ${cypherRunFile}
-        sed -i '' -e '$s/$/;/' ${cypherRunFile}
+      if ! sed '1!G;h;$!d' ${cypherEditFile} | awk 'NF{print;exit}' | grep --extended-regexp --quiet '^.*;\s*$|;\s*//.*$'; then
+        # printf "%s" ";" >> ${cypherEditFile}
+        sed -i '' -e '$s/$/;/' ${cypherEditFile}
       fi
   
        # run cypher in cypher-shell, use eval to allow printf to run in correct order
@@ -1084,16 +1084,16 @@ cleanAndRunCypher () {
       if [[ ${save_results}  == "Y" ]]; then
         eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
               [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-              [[ ${inc_cypher} == "Y" ]] && cat ${cypherRunFile};  \
-              if [[ ${inc_cypher} == "Y" ]];then cat ${cypherRunFile}; printf '\n'; fi;  \
-              if [[ ${inc_cypher_as_comment} == "Y" ]];then sed -e 's/^/\/\/ /' ${cypherRunFile}; printf '\n'; fi;  \
-              ${cypher_shell_cmd_line} < ${cypherRunFile}  2>&1" | tee  ${resultsFile} | less ${less_options} 
+              [[ ${inc_cypher} == "Y" ]] && cat ${cypherEditFile};  \
+              if [[ ${inc_cypher} == "Y" ]];then cat ${cypherEditFile}; printf '\n'; fi;  \
+              if [[ ${inc_cypher_as_comment} == "Y" ]];then sed -e 's/^/\/\/ /' ${cypherEditFile}; printf '\n'; fi;  \
+              ${cypher_shell_cmd_line} < ${cypherEditFile}  2>&1" | tee  ${resultsFile} | less ${less_options} 
       else 
         eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
               [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
-              if [[ ${inc_cypher} == "Y" ]];then cat ${cypherRunFile}; printf '\n'; fi;  \
-              if [[ ${inc_cypher_as_comment} == "Y" ]];then sed -e 's/^/\/\/ /' ${cypherRunFile}; printf '\n'; fi;  \
-              ${cypher_shell_cmd_line} < ${cypherRunFile}  2>&1" | less ${less_options}
+              if [[ ${inc_cypher} == "Y" ]];then cat ${cypherEditFile}; printf '\n'; fi;  \
+              if [[ ${inc_cypher_as_comment} == "Y" ]];then sed -e 's/^/\/\/ /' ${cypherEditFile}; printf '\n'; fi;  \
+              ${cypher_shell_cmd_line} < ${cypherEditFile}  2>&1" | less ${less_options}
       fi
         # ck return code - PIPESTATUS[0] for bash, pipestatus[1] for zsh
       if [[ ${PIPESTATUS[0]} -ne 0 || ${pipestatus[1]} -ne 0 ]]; then
@@ -1127,11 +1127,19 @@ generateFileNames () {
     fi
   fi
   
+   # if using editor vs. stdin then keep using same file 
   if [[ -n ${input_cypher_file_name} ]]; then
-    cypherRunFile=${input_cypher_file_name}
+    if [[ -n ${editor_to_use} ]]; then # keep using same file
+      cypherEditFile=${input_cypher_file_name}
+    elif [[ ${edit_cnt} -eq 0 ]]; then # only use input file on 1st run for stdin
+      cypherEditFile=${input_cypher_file_name}
+    else # 
+      cypherEditFile=${cypherSaveFile}
+    fi
   else
-    cypherRunFile=${cypherSaveFile}
+    cypherEditFile=${cypherSaveFile}
   fi
+  [ ! -f ${cypherEditFile} ] && touch ${cypherEditFile} # will create if it doesn't exist
 }
 
 intermediateFileHandling () {
@@ -1143,12 +1151,14 @@ intermediateFileHandling () {
     fi
 
     if [[ ${save_cypher} == "Y" ]]; then
-      cp ${cypherRunFile} ${cypherSaveFile}
+      cp ${cypherEditFile} ${cypherSaveFile}
     fi
     generateFileNames
     if [[ -n ${input_cypher_file_name} && -n ${editor_to_use} ]]; then # have input file
-      cp ${cypherRunFile} ${input_cypher_file_name} 
+      cp ${cypherEditFile} ${input_cypher_file_name} 
     fi
+  else
+    generateFileNames
   fi
 }
 
@@ -1156,35 +1166,33 @@ getCypherText () {
 
   # input cypher text, either from pipe, editor, or stdin (usually terminal window in editor)
   if [[ -n ${input_cypher_file_name} && ${run_once} == "Y" ]]; then
-    cat ${input_cypher_file_name} > ${cypherRunFile}  # run once with input file
+    # cat ${input_cypher_file_name} > ${cypherEditFile}  # run once with input file
     return
   elif [[ ! -n ${editor_to_use} ]]; then # using stdin
     if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
       outputQryRunMsg # output run query header
     fi
       
-    if [[ ${edit_cnt} -ne 0 ]]; then
-      if [[ -n ${input_cypher_file_name} && ${edit_cnt} -eq 0 ]]; then # running from a file on first input
-        cat ${cypherRunFile}
-      else
-        cat /dev/null > ${cypherRunFile}
-      fi
+    if [[ ${edit_cnt} -eq 0 ]]; then 
+      cat ${cypherEditFile}  # output existing text
+    else 
+      cat /dev/null
     fi
-      # execute query w/o input if have input file and doing a -1 option
+     # read with -i would be very usefule here.  Not on mac
     local old_ifs=${IFS}
-    while IFS= read -r line; do
-      printf '%s\n' "$line" >> ${cypherRunFile}
+    while IFS= read -er line; do
+      printf '%s\n' "$line" >> ${cypherEditFile}
     done
     IFS=${old_ifs}
-  else # using external editor
+  else
     while true; do
       if [[ ${editor_to_use} != "vi" ]]; then
-        ${editor_to_use} ${cypherRunFile}
+        ${editor_to_use} ${cypherEditFile}
       else # using vi
         if [[ ${edit_cnt} -eq 0 &&  -z "${input_cypher_file}" ]]; then
-          ${editor_to_use} ${VI_INITIAL_OPEN_OPTS} ${cypherRunFile} # open file option +star (new file)
+          ${editor_to_use} ${VI_INITIAL_OPEN_OPTS} ${cypherEditFile} # open file option +star (new file)
         else
-          ${editor_to_use} ${cypherRunFile}
+          ${editor_to_use} ${cypherEditFile}
         fi
       fi
 
