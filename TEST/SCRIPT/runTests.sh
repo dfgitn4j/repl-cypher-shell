@@ -1,4 +1,5 @@
-# set -xv
+#set -xv
+# set -e  # exit on error 
 # test parameters in script.  Simpler than using expect
 #
 # Run with one parameter will return the variables used as exit codes in the 
@@ -47,6 +48,7 @@ EOV
   TMP_TEST_FILE=aFile_${RANDOM}${QRY_FILE_POSTFIX}
   QRY_OUTPUT_FILE="qryResults_${RANDOM}.tmpQryOutputFile"
   RESULTS_OUTPUT_FILE="resultsTestRun.out"
+  MY_FILE_NAME="myFileName" # for testing defining input name
 
   testSuccessQry="WITH 1 AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;"
   testSuccessGrep="grep -c --color=never CYPHER_SUCCESS"
@@ -57,10 +59,6 @@ EOV
   testParamParams="--param 'x => 2' --param 'strParam => \"goodParam\"'"
   testParamGrep="grep -c --color=never goodParam"
   testTimeParamGrep="grep -c --color=never '${TIME_OUTPUT_HEADER}'"
-
-  runCnt=0
-  successCnt=0
-  errorCnt=0
 }
 
 # ckForLeftoverOutputFiles () {
@@ -115,13 +113,16 @@ existingFileCnt () {
 
 # output for screen and results file
 printOutput () {
+ #24. PASS  Exit Code: 0  Exp Code: 0 Input: STDIN Err Msg:   Desc: uid/pw tests - using -u and and -p arguments
+ # PASS  Exit Code: 0  Exp Code: 0 Input: not providedErr Msg:   Desc: 
 
-  printf "%s  Exit Code: %d  Exp Code: %d Input: %-6sErr Msg: %s\tDesc: %s\n" \
-         ${msg} ${exitCode} ${expectedExitCode} ${testType} "${secondErrorMsg}" "${desc}"
-  printf "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
-         ${msg} ${exitCode} ${expectedExitCode} ${testType} \
-         ${errVarNames[@]:${exitCode}:1} ${errVarNames[@]:${expectedExitCode}:1}  \
-         ${usePipe} "'${callingParams}'" "'${secondErrorMsg}'" "'${desc}'" >> ${RESULTS_OUTPUT_FILE}
+
+  printf "%s  Exit Code: %d  Exp Code: %d Input: %-6s Err Msg: %s Shell: %-4s Desc: %s\n" \
+         ${msg} ${actualRetCode} ${expectedRetCode} "${type}" "${secondErrorMsg}" "${shellToUse}" "${desc}"
+  printf "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+         ${msg} ${actualRetCode} ${expectedRetCode} ${type} \
+         ${errVarNames[@]:${actualRetCode}:1} ${errVarNames[@]:${expectedRetCode}:1}  \
+         ${usePipe} "'${callingParams}'" "'${secondErrorMsg}'" "'${shellToUse}'" "'${desc}'" >> ${RESULTS_OUTPUT_FILE}
 }
 
 
@@ -136,7 +137,7 @@ printOutput () {
 #
 # Test ordering:
 # 1.  ${testType} runs tested script with either STDIN, PIPE or FILE as input. capture script exit code
-# 2.  If exitCode is not zero, update error count
+# 2.  If actualRetCode is not zero, update error count
 # 3.  Else if not checking for file existence (outputFilePattern is ""), and not check for 
 #     a pattern in an output file (grepFileContentCmd is ""), then update success count.
 # 4.  Else have file existence and file content existence tests
@@ -145,43 +146,65 @@ printOutput () {
 #  4b.   If grep-ing for content in ${QRY_OUTPUT_FILE} and no error triggered by 4a, then run grep cmd 
 #         ${grepFileContentCmd} to validate content in ${QRY_OUTPUT_FILE}
 #  4c.   If no error, ${updateSuccessCnt} == Y, increment ${successCnt}, else increment ${errorCnt}
+#
+# Parameters are a param / value pair, e.g. --nbrFiles 0 will set nbrFiles=0
+#
+# PARAMETERS
+#   REQUIRED 
+#     --expectedRetCode integer
+#     --type "FILE" | "STDIN" | "PIPE"
+#     --qry cypher query string
+#     --params parameter string for call to repl-cypher-shell.sh
+#     --outPattern output file(s) pattern string
+#     --nbrFiles integer for expected number of files
+#     --grepPattern file content grep pattern string
+#  
+#     OPTIONAL
+#       --shell string representing shell to use, ksh or zsh
+#       --desc description string for testing ouput 
+
 runShell () {
+  inParams=${@}  # save params in case missing any
 
-  expectedExitCode=${1}
-  testType=${2}
-  testQry="${3}"
-  callingParams="${4}"
-  outputFilePattern="${5}"
-  expectedNbrFiles=${6}
-  grepFileContentCmd="${7}"
-  desc="${8:-not provided}"
-
-  if [[ $# -lt 7 ]] ; then
-    printf '%s\n' "Exiting. Invalid # params to ${0}. Sent:\n(${@})\n Need at least 7, got: $#."
-    printf "Parameters:\n"
-    while (( "$#" )); do printf " '$1'\n"; shift; done 
-    exit 1
+   # var values have -- removed, next param is value
+  while [ $# -gt 0 ]; do
+    if [[ ${1} == *"--"* ]]; then
+      paramName="${1/--/}"
+      declare $paramName="${2}"  # set parameter value
+    fi
+    shift;shift
+  done
+  if [[ ! -n ${expectedRetCode+x} || ! -n ${type+x} || ! -n ${qry+x} || \
+        ! -n ${params+x} || ! -n ${outPattern+x} || ! -n ${nbrFiles+x} || \
+        ! -n ${grepPattern+x} ]]; then
+    printf '\n%s\n' "*** ERROR *** Missing required parameter(s) to function runShell."
+    printf "Call:\n"
+    printf " runShell ${inParams}\n\n"
+    exitShell 1
   fi
+
+  desc="${desc:-not provided}"  # description is optional
+  shellToUse="${shell:-zsh}"
 
   secondErrorMsg="" # error not triggered by an invalid return code
   updateSuccessCnt="Y" # assume we're going to have successfull tests
 
   printf "%02d. " $(( ++runCnt ))  # screen output count
 
-  if [[ ${testType} == "STDIN" ]]; then
-    eval bash ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 2>/dev/null <<EOF
-    ${testQry}
+  if [[ ${type} == "STDIN" ]]; then
+    eval ${shellToUse} ${TEST_SHELL} -1 ${params} >${QRY_OUTPUT_FILE} 2>/dev/null <<EOF
+    ${qry}
 EOF
-    exitCode=$?
+    actualRetCode=$?
 
-  elif [[ ${testType} == "PIPE" ]]; then
-    echo ${testQry} | eval bash ${TEST_SHELL} ${callingParams} >${QRY_OUTPUT_FILE} 
-    exitCode=$?
-  elif [[ ${testType} == "FILE" ]]; then # expecting -f <filename> parameter
-    bash ${TEST_SHELL} -1 ${callingParams} >${QRY_OUTPUT_FILE} 
-    exitCode=$?
+  elif [[ ${type} == "PIPE" ]]; then
+    echo ${qry} | eval ${shellToUse} ${TEST_SHELL} ${params} >${QRY_OUTPUT_FILE} 
+    actualRetCode=$?
+  elif [[ ${type} == "FILE" ]]; then # expecting -f <filename> parameter
+    ${shellToUse} ${TEST_SHELL} -1 ${params} >${QRY_OUTPUT_FILE} 
+    actualRetCode=$?
   else
-    # printf "Exiting. Invalid testType specification: '${testType}' Valid entries are STDIN, PIPE, FILE.\n"
+    # printf "Exiting. Invalid type specification: '${type}' Valid entries are STDIN, PIPE, FILE.\n"
     # printf "Parameters:\n"
     while (( "$#" )); do printf " '$1'\n"; shift; done 
     exit 1
@@ -189,24 +212,24 @@ EOF
 
   rm ${QRY_OUTPUT_FILE} # remove transient transient output file
   updateSuccessCnt="N"
-  if [[ ${exitCode} -ne ${expectedExitCode} ]]; then
-    printf -v secondErrorMsg "%s" "Expected exit code = ${expectedExitCode}, got ${exitCode}"
-  elif [[ -z ${outputFilePattern} ]]; then # no output files expected.
+  if [[ ${actualRetCode} -ne ${expectedRetCode} ]]; then
+    printf -v secondErrorMsg "%s" "Expected exit code = ${expectedRetCode}, got ${actualRetCode}"
+  elif [[ -z ${outPattern} ]]; then # no output files expected.
     existingFileCnt "${saveAllFilePattern}" # should be no files. error if there is
     if [[ ${_fileCnt} -ne 0 ]]; then
       secondErrorMsg="Output files from shell exist that should not be there."
     else
       updateSuccessCnt="Y"
     fi
-  elif [[ -n ${outputFilePattern} ]]; then # file existence and file content existence tests
-      # fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${outputFilePattern}" | wc -l ) 
-    existingFileCnt "${outputFilePattern}"
-    if [[ ${_fileCnt} -ne ${expectedNbrFiles} ]]; then
-        printf -v secondErrorMsg "%s" "Expected ${expectedNbrFiles} output files, got ${_fileCnt}"
+  elif [[ -n ${outPattern} ]]; then # file existence and file content existence tests
+      # fileCnt=$(find * -type f -depth 0 | grep --color=never -E "${outPattern}" | wc -l ) 
+    existingFileCnt "${outPattern}"
+    if [[ ${_fileCnt} -ne ${nbrFiles} ]]; then
+        printf -v secondErrorMsg "%s" "Expected ${nbrFiles} output files, got ${_fileCnt}"
         # clean up output files. not using find regex for portability
-    elif [[ ! -z ${grepFileContentCmd} ]] && \
-         [[ $(eval "${grepFileContentCmd} ${QRY_OUTPUT_FILE}") -eq 0 ]]; then # output of grep cmd should be > 0
-      printf -v secondErrorMsg "%s" "grep command '${grepFileContentCmd}' on output file: ${QRY_OUTPUT_FILE} failed."
+    elif [[ ! -z ${grepPattern} ]] && \
+         [[ $(eval "${grepPattern} ${QRY_OUTPUT_FILE}") -eq 0 ]]; then # output of grep cmd should be > 0
+      printf -v secondErrorMsg "%s" "grep command '${grepPattern}' on output file: ${QRY_OUTPUT_FILE} failed."
     else
       updateSuccessCnt="Y"
     fi
@@ -234,195 +257,374 @@ EOF
   enterToContinue
 }
 
+chgSaveFilePattern() {
+   # $1 = use default output file patterns or new. $2 = new file pattern
+  if [[ $# -lt 1 || $# -gt 2 ]]; then
+    printf "\n%s\n" "*** Internal error in function chgSaveFilePattern(). Invalid parameters "
+    while (( "$#" )); do printf " ${1} "; shift; done 
+    exitShell 1
+  fi
+
+  if [[ ${1} == "--default" ]]; then
+    saveAllFilePattern="${OUTPUT_FILES_PREFIX}.*(${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})"
+    saveQryFilePattern="${OUTPUT_FILES_PREFIX}.*${QRY_FILE_POSTFIX}"
+    saveResultsFilePattern="${OUTPUT_FILES_PREFIX}.*${RESULTS_FILE_POSTFIX}"
+  elif [[ ${1} == "--new" ]]; then
+    if [[ -z ${2} ]]; then 
+      printf "\n%s\n" "*** Internal error in function chgSaveFilePattern(). Missing file name paramenter."
+      exitShell 
+    fi
+    saveAllFilePattern="${2}.*(${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})"
+    saveQryFilePattern="${2}.*${QRY_FILE_POSTFIX}"
+    saveResultsFilePattern="${2}.*${RESULTS_FILE_POSTFIX}"
+  else
+    printf "\n%s\n" "*** Internal error in function $0. invalid option ${1} "
+    exitShell 1
+  fi
+}
 # someday write expect scripts for interactive input
 testsToRun () {
-  EXIT_ON_ERROR="Y"
 
+  runCnt=0
+  successCnt=0
+  errorCnt=0
+   # first and only parameter must be a shell to run
+  shellParam=${1:-zsh}
+  printf "Starting using ${shellParam}\n"
     # output file header
-  printf "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tError Message\tDescription\n" > ${RESULTS_OUTPUT_FILE}
+  printf  "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tError Message\tShell\tDescription\n" > ${RESULTS_OUTPUT_FILE}
 
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "" "" 0 "" \
-           "tesing connection - using NEO4J_[USERNAME PASSWORD] environment variables."
+  printf "\n*** Initial db connect test ***\n" 
+  EXIT_ON_ERROR="Y"
+   # 01
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params ""  --outPattern "" \
+           --nbrFiles 0 --grepPattern "" --shell ${shellParam} \
+           --desc "tesing connection - using NEO4J_[USERNAME PASSWORD] environment variables."
+  EXIT_ON_ERROR="N"
 
   # INVALID PARAMETER TESTS -  none of these test should ever get to executing a query
   printf "\n*** Invalid paramater tests ***\n"  
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "STDIN" "" "--param" "" 0 "" \
-           "invalid param test - missing parameter argument value."
-
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "STDIN" "" "--exitOnError noOptValExpected" "" 0 "" \
-           "invalid param test - flag argument only, no option expected."
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "" "-Nogood" "" 0 "" \
-           "invalid param test - bad passthru argument to cypher-shell."
-
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "STDIN" "" "--file" "" 0 "" \
-           "invalid param test - missing file argument value."
-
-  runShell ${RCODE_INVALID_FORMAT_STR} "STDIN" "" "--format notgood" "" 0 "" \
-           "invalid param test - invalid format string."
- 
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "STDIN" "" "--vi --editor 'atom'" "" 0 "" \
-           "invalid param test - conflicting editor args."
-
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--vi" "" 0 "" \
-           "invalid param test - incompatible editor argument and pipe input"
+   # 02
+  runShell --expectedRetCode ${RCODE_INVALID_CMD_LINE_OPTS} --type "STDIN" --qry "" \
+           --params "--param"  --outPattern "" \
+           --nbrFiles 0  --grepPattern ""  --shell ${shellParam} \
+           --desc "invalid param test - missing parameter argument value."
+    # 03
+  runShell --expectedRetCode ${RCODE_INVALID_CMD_LINE_OPTS} --type "STDIN" --qry "" \
+           --params "--exitOnError noOptValExpected"  --outPattern "" \
+           --nbrFiles 0  --grepPattern ""  --shell ${shellParam} \
+           --desc "invalid param test - flag argument only, no option expected."
+    # 04
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "STDIN" --qry "" \
+           --params "-Nogood"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc  "invalid param test - bad passthru argument to cypher-shell."
+    # 05
+  runShell --expectedRetCode ${RCODE_INVALID_CMD_LINE_OPTS} --type "STDIN" --qry "" \
+           --params "--file"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - missing file argument value."
+     # 06
+  runShell --expectedRetCode ${RCODE_INVALID_FORMAT_STR} --type "STDIN" --qry "" \
+           --params "--format notgood"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - invalid format string."
+     # 07
+  runShell --expectedRetCode ${RCODE_INVALID_CMD_LINE_OPTS} --type "STDIN" --qry "" \
+           --params "--vi --editor 'atom'"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - conflicting editor args."
+    # 08
+  runShell --expectedRetCode ${RCODE_INVALID_CMD_LINE_OPTS} --type "PIPE" --qry "" \
+           --params "--vi"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - incompatible editor argument and pipe input"
 
   touch ${TMP_TEST_FILE}
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--file ${TMP_TEST_FILE}" "${QRY_OUTPUT_FILE}" 0 "" \
-           "invalid param test - incompatible file input and pipe input."
+    # 09
+  runShell --expectedRetCode ${RCODE_INVALID_CMD_LINE_OPTS} --type "PIPE" --qry "" \
+           --params "--file ${TMP_TEST_FILE}"  --outPattern "${QRY_OUTPUT_FILE}" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - incompatible file input and pipe input."
   rm ${TMP_TEST_FILE}
 
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--exitOnError nogood" "" 0 "" \
-           "invalid param test - flag argument only, no option expected."
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "" "-Nogood" "" 0 "" \
-           "invalid param test - bad pass thru argument to cypher-shell."
-
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--file" "" 0 "" \
-           "invalid param test - missing file argument value."
-
-  runShell ${RCODE_INVALID_FORMAT_STR} "PIPE" "" "--format notgood" "" 0 "" \
-           "invalid param test - invalid format string."
-
-  runShell ${RCODE_INVALID_CMD_LINE_OPTS} "PIPE" "" "--vi --editor 'atom'" "" 0 "" \
-           "invalid param test - conflicting editor args."
+    # 10
+  runShell --expectedRetCode ${RCODE_INVALID_CMD_LINE_OPTS} --type "PIPE" --qry "" \
+           --params "--exitOnError nogood"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - flag argument only, no option expected."
+    # 11
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "PIPE" --qry "" \
+           --params "-Nogood"  --outPattern "" --shell ${shellParam} \
+           --nbrFiles 0  --grepPattern "" \
+           --desc "invalid param test - bad pass thru argument to cypher-shell."
+    # 12
+  runShell --expectedRetCode ${RCODE_INVALID_CMD_LINE_OPTS} --type "PIPE" --qry "" \
+           --params "--file"  --outPattern "" --shell ${shellParam} \
+           --nbrFiles 0  --grepPattern "" \
+           --desc "invalid param test - missing file argument value."
+    # 13
+  runShell --expectedRetCode ${RCODE_INVALID_FORMAT_STR} --type "PIPE" --qry "" \
+           --params "--format notgood" --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc  "invalid param test - invalid format string."
+    # 14
+  runShell --expectedRetCode ${RCODE_INVALID_CMD_LINE_OPTS} --type "PIPE" --qry "" \
+           --params "--vi --editor 'atom'"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - conflicting editor args."
   
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "" "--invalid param" "" 0 "" \
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "STDIN" --qry "" \
+           --params "--invalid param"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
            "invalid param test - invalid parameter argument value."
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "" "--invalid param" "" 0 "" \
-           "invalid param test - invalid parameter argument value."
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "" "--address n0h0st" "" 0 "" \
-           "invalid param test - bad pass-thru argument to cypher-shell."
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "" "--address n0h0st" "" 0 "" \
-           "invalid param test - bad pass-thru argument to cypher-shell."
-
-  runShell ${RCODE_CYPHER_SHELL_NOT_FOUND} "STDIN" "" "--cypher-shell /a/bad/directory/xxx" "" 0 "" \
-           "invalid param test - explicitly set cypher-shell executable with --cypher-shell."
+    # 15
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "PIPE" --qry "" \
+           --params "--invalid param"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - invalid parameter argument value."
+    # 16
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "STDIN" --qry "" \
+           --params "--address n0h0st"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - bad pass-thru argument to cypher-shell."
+    # 17
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "PIPE" --qry "" \
+           --params "--address n0h0st"  --outPattern "" --shell ${shellParam} \
+           --nbrFiles 0  --grepPattern "" \
+           --desc "invalid param test - bad pass-thru argument to cypher-shell."
+    # 18
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_NOT_FOUND} --type "STDIN" --qry "" \
+           --params "--cypher-shell /a/bad/directory/xxx"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "invalid param test - explicitly set cypher-shell executable with --cypher-shell."
 
   # VALID PARAM TESTS
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--cypher-shell ${CYPHER_SHELL}" "" 0 "" \
-           "param test - explicitly set cypher-shell executable with --cypher-shell."
-
-  runShell ${RCODE_SUCCESS} "STDIN" "" "--version" "" 0 "" \
-           "param test - cypher-shell one-and-done version arg."
-
-  runShell ${RCODE_SUCCESS} "PIPE" "" "--version" "" 0 "" \
-           "param test - cypher-shell one-and-done version arg."
-
-  runShell ${RCODE_SUCCESS} "PIPE" "${testSuccessQry}" "--address localhost" "" 0 "" \
-           "param test - good thru argument to cypher-shell."
+    # 19
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "--cypher-shell ${CYPHER_SHELL}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "param test - explicitly set cypher-shell executable with --cypher-shell."
+    # 20
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "" \
+           --params "--version"  --outPattern "" --shell ${shellParam} \
+           --nbrFiles 0  --grepPattern "" \
+           --desc "param test - cypher-shell one-and-done version arg."
+    # 21
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "PIPE" --qry "" \
+           --params "--version"  --outPattern "" --shell ${shellParam} \
+           --nbrFiles 0  --grepPattern "" \
+           --desc "param test - cypher-shell one-and-done version arg."
+    # 22
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "PIPE" --qry "${testSuccessQry}" \
+           --params "--address localhost"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "param test - good thru argument to cypher-shell."
 
   # PASSWORD TESTS
-  printf "\n*** Starting uid / pw tests ***\n"  
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "-u ${uid} -p ${pw}" "" 0 "" \
-           "uid/pw tests - using -u and and -p arguments"
-
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "-u ${uid}" "" 0 "" \
-           "uid/pw tests - using -u and NEO4J_PASSWORD environment variable."
-
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "-p ${pw}" "" 0 "" \
-           "uid/pw tests - using -p and NEO4J_USERNAME environment variable."
-  
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "-p ${pw}" "" 0 "" \
-           "uid/pw tests - using -p and NEO4J_USERNAME environment variable."
-  
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "${testSuccessQry}" "-p ${pw}xxx" "" 0 "" \
-           "uid/pw tests - using -u bad password"
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "${testSuccessQry}" "-u ${uid}xxx" "" 0 "" \
-           "uid/pw tests - using -u bad username"
+  printf "\n*** Starting uid / pw tests ***\n" 
+    # 23 
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "-u ${uid} -p ${pw}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "uid/pw tests - using -u and and -p arguments"
+    # 24
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "-u ${uid}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "uid/pw tests - using -u and NEO4J_PASSWORD environment variable."
+    # 25
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "-p ${pw}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "uid/pw tests - using -p and NEO4J_USERNAME environment variable."
+    # 26 
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "-p ${pw}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "uid/pw tests - using -p and NEO4J_USERNAME environment variable."
+    # 27
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "-p ${pw}xxx"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "uid/pw tests - using -u bad password"
+    # 28
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "-u ${uid}xxx" --outPattern "" \
+           --nbrFiles 0  --grepPattern ""  --shell ${shellParam}\
+           --desc "uid/pw tests - using -u bad username"
   
   unset NEO4J_USERNAME
-  runShell ${RCODE_NO_USER_NAME} "PIPE" "${testSuccessQry}" "" "" 0 "" \
-           "uid/pw tests - pipe input with no env or -u usename defined"
+    # 29
+  runShell --expectedRetCode ${RCODE_NO_USER_NAME} --type "PIPE" --qry "${testSuccessQry}" \
+           --params ""  --outPattern "" \
+           --nbrFiles 0  --grepPattern ""  --shell ${shellParam} \
+           --desc "uid/pw tests - pipe input with no env or -u usename defined"
   export NEO4J_USERNAME=${uid}
 
+    # 30
   unset NEO4J_PASSWORD
-  runShell ${RCODE_NO_PASSWORD} "PIPE" "${testSuccessQry}" "" "" 0 "" \
-           "uid/pw tests - pipe input with no env or -p password defined"
+  runShell --expectedRetCode ${RCODE_NO_PASSWORD} --type "PIPE" --qry "${testSuccessQry}" \
+           --params ""  --outPattern "" \
+           --nbrFiles 0  --grepPattern ""  --shell ${shellParam} \
+           --desc "uid/pw tests - pipe input with no env or -p password defined"
   export NEO4J_PASSWORD=${pw}
   
   printf "\n*** Starting bad query test ***\n" 
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "${testFailQry}" "" "" 0 "" \
-           "query tests - bad cypher query"
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "${testFailQry}" "" "" 0 "" \
-           "query tests - bad cypher query piped input"
+    # 31
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "STDIN" --qry "${testFailQry}" \
+           --params ""  --outPattern "" \
+           --nbrFiles 0  --grepPattern ""  --shell ${shellParam} \
+           --desc "query tests - bad cypher query"
+    # 32
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "PIPE" --qry "${testFailQry}" \
+           --params ""  --outPattern "" \
+           --nbrFiles 0  --grepPattern ""  --shell ${shellParam} \
+           --desc "query tests - bad cypher query piped input"
 
   # QUERY INPUT TESTING 
   printf "\n*** Starting query method and param and output tests ***\n" 
-
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--time" "" 0 "${testTimeParamGrep}" \
-           "param test - test --time parameter output."
-
-  runShell ${RCODE_SUCCESS} "STDIN" "${testParamQry}" "${testParamParams}" "" 0 "${testParamGrep}" \
-           "param test - multiple arguments."
-
-  runShell ${RCODE_SUCCESS} "PIPE" "${testParamQry}" "${testParamParams}" "" 0 "${testParamGrep}" \
-           "param test - multiple arguments."
-
-  runShell ${RCODE_EMPTY_INPUT} "STDIN" "" "" "" 0 "" \
+    # 33
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "--time"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "${testTimeParamGrep}" --shell ${shellParam} \
+           --desc "param test - test --time parameter output."
+    # 34
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testParamQry}" \
+           --params "${testParamParams}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "${testParamGrep}" --shell ${shellParam} \
+           --desc "param test - multiple arguments."
+    # 35
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "PIPE" --qry "${testParamQry}" \
+           --params "${testParamParams}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "${testParamGrep}" --shell ${shellParam} \
+           --desc  "param test - multiple arguments."
+    # 36
+  runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "STDIN" --qry "" \
+           --params ""  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "query tests - empty cypher query"
+    # 37
+  runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "PIPE" --qry "" \
+           --params ""  --outPattern ""\
+           --nbrFiles  0  --grepPattern "" --shell ${shellParam} \
            "query tests - empty cypher query"
-
-  runShell ${RCODE_EMPTY_INPUT} "PIPE" "" "" "" 0 "" \
-           "query tests - empty cypher query"
-
-  runShell ${RCODE_EMPTY_INPUT} "STDIN" "" "-t -c --quiet" "" 0 "" \
-           "query tests - empty cypher query with --quiet"
-
-  runShell ${RCODE_EMPTY_INPUT} "PIPE" "" "-t -c --quiet" "" 0 "" \
-           "query tests - empty cypher query with --quiet"
-
+    # 38
+  runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "STDIN" --qry "" \
+           --params "-t -c --quiet"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "query tests - empty cypher query with --quiet"
+    # 39
+  runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "PIPE" --qry "" \
+           --params "-t -c --quiet"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "query tests - empty cypher query with --quiet"
+    # 40
   echo "${testSuccessQry}" > ${TMP_TEST_FILE}
-  runShell ${RCODE_SUCCESS} "FILE" "" "--file ${TMP_TEST_FILE}" "" 0 "${testSuccessGrep}" \
-           "query / file tests - run external cypher file with valid query, validate output"
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "FILE" --qry "" \
+           --params "--file ${TMP_TEST_FILE}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "${testSuccessGrep}" --shell ${shellParam} \
+           --desc "query / file tests - run external cypher file with valid query, validate output"
+    # 41
+  runShell --expectedRetCode ${RCODE_MISSING_INPUT_FILE} --type "FILE" --qry "" \
+           --params "--file NoFile22432.cypher"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "query / file tests - run external cypher file missing file"
 
-  runShell ${RCODE_MISSING_INPUT_FILE} "FILE" "" "--file NoFile22432.cypher" "" 0 "" \
-           "query / file tests - run external cypher file missing file"
-
-  echo "${TEST_SHELL}" > ${TMP_TEST_FILE}
+    # 42
   echo "${testSuccessQry}" >> ${TMP_TEST_FILE}
-  runShell ${RCODE_SUCCESS} "FILE" "" "--file ${TMP_TEST_FILE}" "" 0 "" \
-           "query / file tests - executing shell name at beginning of text before cypher"
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "FILE" --qry "" \
+           --params "--file ${TMP_TEST_FILE}"   --outPattern "" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "query / file tests - executing shell name at beginning of text before cypher"
   rm ${TMP_TEST_FILE}
 
   # SAVE FILE TESTS
   printf "\n*** Starting save file test ***\n" 
+    # 43
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}"  \
+           --params "--saveAll"  --outPattern "${saveAllFilePattern}" \
+           --nbrFiles 2  --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save cypher query and text results files."
+    # 44
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}"  \
+           --params "--saveCypher"  --outPattern "${saveQryFilePattern}" \
+           --nbrFiles 1  --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save cypher query file."
+     # 45 
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}"  \
+           --params "--saveResults"  --outPattern "${saveResultsFilePattern}" \
+           --nbrFiles 1  --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save results file."
+    # 46
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "PIPE" --qry "${testSuccessQry}"  \
+           --params "--saveResults"  --outPattern "${saveResultsFilePattern}" \
+           --nbrFiles 1  --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save results file."
+    # 47
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "STDIN" --qry "${testFailQry}"  \
+           --params "--saveResults"  --outPattern "${saveResultsFilePattern}" \
+           --nbrFiles 1  --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - bad query input save results file that will not exist."
+    # 48
+  runShell --expectedRetCode ${RCODE_CYPHER_SHELL_ERROR} --type "PIPE" --qry "${testFailQry}"  \
+           --params "--saveResults"  --outPattern "${saveResultsFilePattern}" \
+           --nbrFiles 1  --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - bad query input save results file that will not exist."
+    # 49
+  runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "STDIN" --qry ""  \
+           --params "--saveResults"  --outPattern "${saveResultsFilePattern}" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - empty input query input save results file that will not exist."
+    # 50
+  runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "PIPE" --qry ""  \
+           --params "--saveResults"  --outPattern "${saveResultsFilePattern}" \
+           --nbrFiles 0  --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - empty input query input save results file that will not exist."
 
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--saveAll" "${saveAllFilePattern}" 2 "" \
-           "file tests - save cypher query and text results files."
+  # begin testing own output file names
+    # 51
+  chgSaveFilePattern --new "${MY_FILE_NAME}"
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "--saveAll ${MY_FILE_NAME}" --outPattern "${saveAllFilePattern}" \
+           --nbrFiles 2 --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save with my defined file pattern."
+    # 52
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "--saveCypher ${MY_FILE_NAME}" --outPattern "${saveAllFilePattern}" \
+           --nbrFiles 1 --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save with my defined file pattern."
+    # 53
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
+           --params "--saveResults ${MY_FILE_NAME}" --outPattern "${saveAllFilePattern}" \
+           --nbrFiles 1 --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save with my defined file pattern."
+    # 54
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "PIPE" --qry "${testSuccessQry}" \
+           --params "--saveAll ${MY_FILE_NAME}" --outPattern "${saveAllFilePattern}" \
+           --nbrFiles 2 --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save with my defined file pattern."
+    # 55
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "PIPE" --qry "${testSuccessQry}" \
+           --params "--saveCypher ${MY_FILE_NAME}" --outPattern "${saveAllFilePattern}" \
+           --nbrFiles 1 --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save with my defined file pattern."
+    # 56
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "PIPE" --qry "${testSuccessQry}" \
+           --params "--saveResults ${MY_FILE_NAME}" --outPattern "${saveAllFilePattern}" \
+           --nbrFiles 1 --grepPattern "" --shell ${shellParam} \
+           --desc "file tests - save with my defined file pattern."
 
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--saveCypher" "${saveQryFilePattern}" 1 "" \
-           "file tests - save cypher query file."
-  
-  runShell ${RCODE_SUCCESS} "STDIN" "${testSuccessQry}" "--saveResults" "${saveResultsFilePattern}" 1 "" \
-           "file tests - save results file."
-
-  runShell ${RCODE_SUCCESS} "PIPE" "${testSuccessQry}" "--saveResults" "${saveResultsFilePattern}" 1 "" \
-           "file tests - save results file."
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "STDIN" "${testFailQry}" "--saveResults" "${saveResultsFilePattern}" 1 "" \
-           "file tests - bad query input save results file that will not exist."
-
-  runShell ${RCODE_CYPHER_SHELL_ERROR} "PIPE" "${testFailQry}" "--saveResults" "${saveResultsFilePattern}" 1 "" \
-           "file tests - bad query input save results file that will not exist."
-
-  runShell ${RCODE_EMPTY_INPUT} "STDIN" "" "--saveResults" "${saveResultsFilePattern}" 0 "" \
-           "file tests - empty input query input save results file that will not exist."
-
-  runShell ${RCODE_EMPTY_INPUT} "PIPE" "" "--saveResults" "${saveResultsFilePattern}" 0 "" \
-           "file tests - empty input query input save results file that will not exist."
-
-  printf "\nFinished. %s: %d  %s: %d\n" ${successMsg} ${successCnt} ${errorMsg} ${errorCnt}
+  printf "\nFinished using %s. %s: %d  %s: %d\n" ${shellParam} ${successMsg} ${successCnt} ${errorMsg} ${errorCnt}
 }
 
 #
 # MAIN
 #
+setopt SH_WORD_SPLIT >/dev/null 2>&1
+
 # vars that might need to be modified 
 TEST_SHELL='../../repl-cypher-shell.sh'
 CYPHER_SHELL="$(which cypher-shell)" # change  if want to use a different cypher-shell
@@ -452,7 +654,9 @@ if [[ $# -gt 0 ]]; then # any param prints shell variables
 fi  
 
 # ckForLeftoverOutputFiles 
-
-testsToRun
+for shell in 'zsh' 'bash'; do
+  chgSaveFilePattern --default
+  testsToRun ${shell}
+done
 exitShell 0
 #./formatOutput.sh ${RESULTS_OUTPUT_FILE}

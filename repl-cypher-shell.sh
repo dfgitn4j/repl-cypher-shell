@@ -1,3 +1,5 @@
+#!/bin/zsh
+
 #set -xv
 # script to front-end cypher-shell and pass output to pager
 
@@ -28,7 +30,7 @@ usage() {
   ** Query output save options
   [-A | --saveAll]     [allFilesPrefix]     save cypher query and output results 
                                             files with optional user set prefix.
-  [-R | --saveResults] [resultsFilePrefix]  save each query output in to a file. 
+  [-R | --saveResults] [resultFilePrefix]  save each query output in to a file. 
                                             files with optional user set prefix.
   [-S | --saveCypher]  [cypherFilePrefix]   save each query statement in a file.
                                             files with optional user set prefix.
@@ -161,7 +163,7 @@ dashHelpOutput() {
     The optional parameter [allFilesPrefix]-[qry nbr].[cypher|txt] will be used instead of the default
     file naming above. 
   
-  -R [resultsFilePrefix] | --saveResults [resultsFilePrefix])
+  -R [resultFilePrefix] | --saveResults [resultFilePrefix])
       
     Save query results to a file in the current directory. The file will have the
     same timestamp and session identifier in the file name as the query results
@@ -650,7 +652,7 @@ getArgs() {
       # begin repl-cypher-shell specific options
         # save options
       -A | --saveAll) # keep cypher queries and output results files.
-         getOptArgs 0 "$@"
+         getOptArgs -1 "$@"
          save_all="Y"
          coll_args="${coll_args} ${_currentParam}"
          if [[ ${arg_shift_cnt} -eq 2 ]]; then 
@@ -1121,7 +1123,7 @@ generateFileNames () {
       printf -v cypherSaveFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${QRY_FILE_POSTFIX}
     fi
     if [[ -n ${resultFilePrefix} ]]; then
-      printf -v resultsFile "%s-%d%s" ${resultsFilePrefix} ${file_nbr} ${RESULTS_FILE_POSTFIX} 
+      printf -v resultsFile "%s-%d%s" ${resultFilePrefix} ${file_nbr} ${RESULTS_FILE_POSTFIX} 
     else
       printf -v resultsFile "%s_%s_%s-%d%s" ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} ${RESULTS_FILE_POSTFIX} 
     fi
@@ -1150,7 +1152,8 @@ intermediateFileHandling () {
       # find . -maxdepth 1 -type f -name "${resultsFile}"  -exec rm {} \;
     fi
 
-    if [[ ${save_cypher} == "Y" ]]; then
+     # some scenarios in input loop where the two files are the same
+    if [[ ${save_cypher} == "Y" && ${cypherEditFile} != ${cypherSaveFile} ]]; then
       cp ${cypherEditFile} ${cypherSaveFile}
     fi
     generateFileNames
@@ -1180,7 +1183,7 @@ getCypherText () {
     fi
      # read with -i would be very usefule here.  Not on mac
     local old_ifs=${IFS}
-    while IFS= read -er line; do
+    while IFS= read -r line; do
       printf '%s\n' "$line" >> ${cypherEditFile}
     done
     IFS=${old_ifs}
