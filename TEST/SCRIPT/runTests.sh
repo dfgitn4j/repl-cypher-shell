@@ -294,6 +294,20 @@ testsToRun () {
     # output file header
   printf  "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tError Message\tShell\tDescription\n" > ${RESULTS_OUTPUT_FILE}
 
+  echo "// ONE" > ${TMP_TEST_FILE}
+  echo "${testSuccessQry}" >> ${TMP_TEST_FILE}
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "FILE" --qry "" \
+           --params "--file ${TMP_TEST_FILE}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "ONE" --shell ${shellParam} \
+           --desc "query / file tests - run external cypher file with valid query, validate output"
+  
+  echo "// TWO" > ${TMP_TEST_FILE}
+  echo "${testSuccessQry}" >> ${TMP_TEST_FILE}
+  runShell --expectedRetCode ${RCODE_SUCCESS} --type "FILE" --qry "" \
+           --params "--file ${TMP_TEST_FILE}"  --outPattern "" \
+           --nbrFiles 0  --grepPattern "TWO" --shell ${shellParam} \
+           --desc "query / file tests - run external cypher file with valid query, validate output"
+exit
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   printf "\n*** Initial db connect test ***\n" 
   EXIT_ON_ERROR="Y"
