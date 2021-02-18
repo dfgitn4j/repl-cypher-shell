@@ -496,7 +496,7 @@ outputQryRunMsg () {
   if [[ ! -n "${editor_to_use}" ]]; then # header for stdin
     local _db_msg=""
     if [[  -n "${db_name}" ]]; then
-      _db_msg="Database ${db_name}"
+      _db_msg="Database: ${db_name}"
     fi
     messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${_db_msg}."
     messageOutput "        Ctl-C to terminate stdin and exit ${SHELL_NAME} without running cypher statement."
@@ -654,7 +654,8 @@ getArgs() {
          save_all="Y"
          coll_args="${coll_args} ${_currentParam}"
          if [[ ${arg_shift_cnt} -eq 2 ]]; then 
-           allFilesPrefix=${arg_ret_opts}
+           resultFilePrefix=${arg_ret_opts}
+           cypherFilePrefix=${arg_ret_opts}
          elif [[ ${arg_shift_cnt} -gt 2 ]]; then
             messageOutput "Only one save all files prefix allowed. "  
             messageOutput "Invalid option: ${_currentParam}${arg_ret_opts}"
@@ -1117,6 +1118,7 @@ generateFileNames () {
   (( file_nbr++ )) # increment file nbr if saving files
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
   
+
   if [[ ${save_cypher} == "Y" ]] && [[ -n ${cypherFilePrefix} ]]; then
     printf -v cypherSaveFile "%s-%d%s" ${cypherFilePrefix} ${file_nbr} ${QRY_FILE_POSTFIX}
   else
