@@ -114,7 +114,7 @@ printOutput () {
  # PASS  Exit Code: 0  Exp Code: 0 Input: not providedErr Msg:   Desc: 
 
 
-  printf "%s  Exit Code: %d  Exp Code: %d Input: %-6s Err Msg: %-6ss Shell: %-4s Desc: %s\n" \
+  printf "%s  Exit Code: %d  Exp Code: %d Input: %-6s Err Msg: %-6s Shell: %-4s Desc: %s\n" \
          ${msg} ${actualRetCode} ${expectedRetCode} "${type}" "${secondErrorMsg}" "${shellToUse}" "${desc}"
   printf "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
          ${msg} ${actualRetCode} ${expectedRetCode} ${type} \
