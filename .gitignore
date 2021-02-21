@@ -1,6 +1,5 @@
 SCRATCH/
 TEST/SCRIPT/SCRATCH/
-TEST/SCRIPT/SAVE
 .idea
 .DS_Store
 qry*.cypher
