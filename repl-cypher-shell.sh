@@ -355,10 +355,7 @@ dashHelpOutput() {
 THISNEEDSHELP
 }
 
-setDefaults () {
-  # pipe input?
-  [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"
-
+setConstants() {
   DB_VER_QRY="CALL dbms.components() YIELD name, versions, edition
   WITH name, versions, edition WHERE name='Neo4j Kernel'
   CALL dbms.showCurrentUser() YIELD username
@@ -383,10 +380,6 @@ setDefaults () {
 
   VI_INITIAL_OPEN_OPTS=' +star '  # Start first exec for vi in append mode.
 
-  edit_cnt=0        # count number of queries run, controls stdin messaging.
-  file_nbr=0        # output file number if query / results file(s) are saved
-  # db_name=""        # will only be populated on neo4j 4.x databases
-
    # variables used in file name creation
    # file patterns are in the form of:
    # ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} (${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})
@@ -394,7 +387,25 @@ setDefaults () {
   QRY_FILE_POSTFIX=".cypher" # postfix for all intermediate files
   RESULTS_FILE_POSTFIX=".txt"
   OUTPUT_FILES_PREFIX="qry"  # prefix all intermediate files
-   # prefix can be passed in cypherFilePrefix, or default OUTPUT_FILES_PREFIX
+
+  TMP_DB_CONN_QRY_FILE="tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
+  TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
+}
+
+setDefaults () {
+  setConstants
+
+  [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"   # pipe input?
+
+  edit_cnt=0        # count number of queries run, controls stdin messaging.
+  file_nbr=0        # output file number if query / results file(s) are saved
+  # db_name=""        # will only be populated on neo4j 4.x databases
+
+  cypherRetCode=${RCODE_SUCCESS} # cypher-shell return code
+}
+
+initIntermediateFiles() {
+    # prefix can be passed in cypherFilePrefix, or default OUTPUT_FILES_PREFIX
   if [[ ! -n ${cypherFilePrefix} ]]; then  
     cypherFilePrefix="${OUTPUT_FILES_PREFIX}" 
     userDefQryPrefix="N"
@@ -407,14 +418,7 @@ setDefaults () {
   else
     userDefResPrefix="Y"
   fi
-
-  TMP_DB_CONN_QRY_FILE="tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
-  TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
-  
-  cypherRetCode=${RCODE_SUCCESS} # cypher-shell return code
-  valid_db_connect="N" # different cypher-shell error message if initial cypher-shell connect is not valid
 }
-
 
 findStr() {
   # ${1} is the string to find
@@ -907,15 +911,15 @@ consumeStdIn () {
 }
 
 exitShell() {
-  # exit shell with return code passed in
+   # exit shell with return code passed in
   consumeStdIn 1 # disccard extra paste lines passed in, if any. Wait 1s for input to catch up with paste
   if [ "${1}" -ne "${1}" ] 2>/dev/null; then # not an integer, then internal error
     messageOutput "INTERNAL ERROR.  Sorry about that.  ${1}"
     return_code=-1
-  elif [[ -z ${1} ]]; then # Ctl-C sent
-    return_code=${RCODE_SUCCESS}
-  else
+  elif [[ $# -eq 1 ]]; then # Ctl-C sent
     return_code=${1}
+  else
+    return_code=${RCODE_SUCCESS}
   fi
   exitCleanUp
   exit "${return_code}"
@@ -1260,9 +1264,9 @@ SHELL_NAME=${0##*/}  # shell name must be set in main to avoid zsh / bash diffs
 trap printContinueOrExit SIGINT 
 trap exitShell SIGHUP SIGTERM 
 
-
-getArgs "$@"
 setDefaults
+getArgs "$@"
+initIntermediateFiles
 
 [[ ${is_pipe} == "N" ]] && clear 
 
