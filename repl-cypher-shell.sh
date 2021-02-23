@@ -22,36 +22,47 @@ usage() {
 
   [-u | --username]        cypher-shell username parameter.
   [-p | --password]        cypher-shell password parameter.
-  [-P | --param]           parameter stings strings. Run --help for how to use.
-  [-f | --file]            file containing query.
+  [-P | --param]           Parameter stings strings. Run --help for how to use.
+  [-f | --file]            File containing query.
   [--format]               cypher-shell --format option.
   
   ** Query output save options
-  [-A | --saveAll]     [allFilesPrefix]     save cypher query and output results 
-                                            files with optional user set prefix.
-  [-R | --saveResults] [resultFilePrefix]  save each query output in to a file. 
-                                            files with optional user set prefix.
-  [-S | --saveCypher]  [cypherFilePrefix]   save each query statement in a file.
-                                            files with optional user set prefix.
+  [-A | --saveAll]     [allFilesPrefix]   Save cypher query and output results 
+                                          files with optional user set prefix.
+  [-R | --saveResults] [resultFilePrefix] Save each query output in to a file. 
+                                          files with optional user set prefix.
+  [-S | --saveCypher]  [cypherFilePrefix] Save each query statement in a file.
+                                          files with optional user set prefix.
+  [-D | --saveDir]     [dirPath]          Directory to save files to.  Default 
+                                          is ${DEF_SAVE_DIR} if dirPath is not provided. 
+
   ** Editor options to use when running from command line **
-  [-E | --editor] [cmd]    use external editor. Run --help for how to use.
+  [-E | --editor] [cmd]    Use external editor. Run --help for how to use.
   [--nano]                 Use nano editor started with 'nano -t' flag.
-  [-V | --vi]              use vi editor.
+  [-V | --vi]              Use vi editor.
+
   ** Runtime options **
-  [-C | --cypher-shell]    path to cypher-shell to use.
-  [-c | --showCmdLn]       show script command line args in output.
-  [-i | --incCypher]       include cypher query at begining of output.
-  [-I | --incCypherAsCmnt] include commented cypher query at beginning of output.
-  [-L | --lessOpts] [opts] use these less pager options instead of defaults.  
-  [-N | --noLogin]         login to Neo4j database not required. 
-  [-q | --quiet]           no informational output messages.
-  [-t | --time]            output query start time.
-  [-1 | --one]             run query execution loop only once and exit.
-  [-X | --exitOnError]     exit script on error.
+
+  [-C | --cypher-shell]    Path to cypher-shell to use.
+  [-c | --showCmdLn]       Show script command line args in output.
+  [-i | --incCypher]       Include cypher query at begining of output.
+  [-I | --incCypherAsCmnt] Include commented cypher query at beginning of output.
+  [-L | --lessOpts] [opts] Use these less pager options instead of defaults.  
+  [-N | --noLogin]         Login to Neo4j database not required. 
+  [-q | --quiet]           No informational output messages.
+  [-t | --time]            Output query start time.
+  [-1 | --one]             Run query execution loop only once and exit.
+  [-X | --exitOnError]     Exit script on error.
+
   ** Usage **
-  [-U | --usage]           command line parameter usage only.
-  [-h | --help]            detailed help message.
+
+  [-U | --usage]           Command line parameter usage only.
+  [-h | --help]            Detailed help message.
+
+  *** remaining parameters ***
+
   [*] ANY other parameters are passed through as is to cypher-shell.
+      Invalid parameters will be caught by cypher-shell.
 USAGE
   fi
 }
@@ -362,6 +373,7 @@ setConstants() {
   RETURN versions, edition, username;"
 
   DB_4x_NAME_QRY="CALL db.info() YIELD name as db_name RETURN db_name;"
+
    # exit codes
    # IMPORTANT for testing scripts where grep is used to get the names and codes
    # Variables must begin with 'RCODE_'  and follow var=<nbr> pattern with nothing else on the line
@@ -377,8 +389,22 @@ setConstants() {
   RCODE_NO_PASSWORD=6
   RCODE_EMPTY_INPUT=7
   RCODE_MISSING_INPUT_FILE=8
+  RCODE_NO_WRITE_PERM=9
+  RCODE_INTERNAL_ERROR=100
+}
 
+setDefaults () {
+  setConstants
+
+  [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"   # pipe input?
+
+  edit_cnt=0        # count number of queries run, controls stdin messaging.
+  file_nbr=0        # output file number if query / results file(s) are saved
+  # db_name=""        # will only be populated on neo4j 4.x databases
+  CS_FORMAT_OPT="--format verbose " # need extra space at end for param validation test
+  LESS_DEF_OPT="--LONG-PROMPT --shift .005"
   VI_INITIAL_OPEN_OPTS=' +star '  # Start first exec for vi in append mode.
+  DEF_SAVE_DIR="RCP_SAVE"
 
    # variables used in file name creation
    # file patterns are in the form of:
@@ -390,35 +416,30 @@ setConstants() {
 
   TMP_DB_CONN_QRY_FILE="tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
   TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
-}
-
-setDefaults () {
-  setConstants
-
-  [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"   # pipe input?
-
-  edit_cnt=0        # count number of queries run, controls stdin messaging.
-  file_nbr=0        # output file number if query / results file(s) are saved
-  # db_name=""        # will only be populated on neo4j 4.x databases
-
   cypherRetCode=${RCODE_SUCCESS} # cypher-shell return code
 }
 
-initIntermediateFiles() {
-    # prefix can be passed in cypherFilePrefix, or default OUTPUT_FILES_PREFIX
-  if [[ ! -n ${cypherFilePrefix} ]]; then  
-    cypherFilePrefix="${OUTPUT_FILES_PREFIX}" 
-    userDefQryPrefix="N"
-  else
-    userDefQryPrefix="Y"
-  fi
-  if [[ ! -n ${resultFilePrefix} ]]; then  
-    resultFilePrefix="${OUTPUT_FILES_PREFIX}" 
-    userDefResPrefix="N"
-  else
-    userDefResPrefix="Y"
+ckSetVarValues() {
+  # bad things can happen if any of these shell variables are not set
+  if [[ ! -n ${SESSION_ID} || \
+        ! -n ${QRY_FILE_POSTFIX} || \
+        ! -n ${RESULTS_FILE_POSTFIX} || \
+        ! -n ${OUTPUT_FILES_PREFIX} || \
+        ! -n ${TMP_DB_CONN_QRY_FILE} || \
+        ! -n ${TMP_DB_CONN_RES_FILE} || \
+        ! -n ${save_dir} ||
+        ! -n ${find_dir} ]] ; then
+    messageOutput "*** INTERNAL ERROR found by ckSetVarValues() - Missing needed internal shell variable. Sorry about that." Y "\n%s\n\n"
+    messageOutput "SESSION_ID='${SESSION_ID}' QRY_FILE_POSTFIX='${QRY_FILE_POSTFIX}' RESULTS_FILE_POSTFIX='${RESULTS_FILE_POSTFIX}'" N
+    messageOutput "OUTPUT_FILES_PREFIX='${OUTPUT_FILES_PREFIX}' TMP_DB_CONN_QRY_FILE='${TMP_DB_CONN_QRY_FILE}' TMP_DB_CONN_RES_FILE='${TMP_DB_CONN_RES_FILE}'" N
+    messageOutput "save_dir='${save_dir}' find_dir='${find_dir}'" N
+    exitShell ${RCODE_INTERNAL_ERROR}
+  else # add $save_dir directory prefix to tmp variables
+    TMP_DB_CONN_QRY_FILE="${save_dir}tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
+    TMP_DB_CONN_RES_FILE="${save_dir}tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
   fi
 }
+
 
 findStr() {
   # ${1} is the string to find
@@ -478,7 +499,7 @@ enterYesNoQuit() {
 printContinueOrExit() {
   # $1 is optional message
   local _msg=${1:-""}
-  if [[ ${run_once}  == "Y" ]]; then # ctl-c; don't give option to continue
+  if [[ ${run_once} == "Y" ]]; then # ctl-c; don't give option to continue
     exitShell ${cypherRetCode}
   fi
   if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
@@ -489,9 +510,14 @@ printContinueOrExit() {
 messageOutput() {  # to print or not to print
   # Not all messages to to output, some go to tty and results file to stdout
   # $1 is message $2 is optional format string for printf
-  local fmt_str=${2:-"%s\n"}
+  local _quote_string=${2:-"Y"}
+  local _fmt_str=${3:-"%s\n"}
   if [[ ${quiet_output} == "N" && ${is_pipe} == "N"  ]]; then
-    printf "${fmt_str}" "${1}"
+    if [[ ${_quote_string} == "Y" ]]; then
+      printf "${_fmt_str}" "${1}"  # quotes means print on one line (default)
+    else
+      printf "${_fmt_str}" ${1}  # no quotes to allow for space delimited output
+    fi
   fi
 }
 
@@ -551,18 +577,19 @@ getOptArgs() {
 getArgs() {
   # less options --shift .01 allows left arrow to only cut off beginning "|"
   # while scrolling at the expense of slower left arrow scrolling
-  less_options="--LONG-PROMPT --shift .005"
+  less_options="${LESS_DEF_OPT}"
 
   user_name=""               # blank string by default
   user_password=""
 
+  cypher_format_arg="${CS_FORMAT_OPT}" 
   cypherShellArgs=""         # any args not in case are assumed to be cypher-shell specific args passed in
-  cypher_format_arg="--format verbose " # need extra space at end for param validation test
   cypher_shell_cmd_line=""   # a string with all the cypher-shell specific command line opts, if passed in.
   no_login_needed="N"        # skip login prompting
   save_cypher="N"            # save each query in own file
   save_results="N"           # save each query output in own file
   save_all="N"               # save cypher and results files
+  save_dir=""                # existence test / default directory to save files if saving directory is not specified
   show_cmd_line="N"          # show command line args in output
   inc_cypher="N"             # output query before results output
   inc_cypher_as_comment="N"  # output commented query before results output
@@ -646,6 +673,21 @@ getArgs() {
          fi     
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
+      -D | --saveDir ) # keep the cypher queries around for future use.
+         getOptArgs -1 "$@"
+         coll_args="${coll_args} ${_currentParam} "
+         if [[ ${arg_shift_cnt} -eq 1 ]]; then
+           save_dir="${DEF_SAVE_DIR}"
+         elif [[ ${arg_shift_cnt} -eq 2 ]]; then # dirctory name specified
+           save_dir="${arg_ret_opts}"
+         elif [[ ${arg_shift_cnt} -gt 2 ]]; then
+           messageOutput "Only one save directory option allowed. "  
+           messageOutput "Invalid option: ${_currentParam}${arg_ret_opts}"
+           messageOutput "Goodbye."
+           exitShell ${RCODE_INVALID_CMD_LINE_OPTS}
+         fi
+         shift "${arg_shift_cnt}" # go past number of params processed
+         ;;
       -R | --saveResults ) # keep the cypher queries around for future use.
          getOptArgs -1 "$@"
          save_results="Y"
@@ -674,6 +716,7 @@ getArgs() {
          fi
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
+
         # editor options
       -E | --editor)
          getOptArgs -1  "$@"
@@ -792,6 +835,12 @@ getArgs() {
   if [[ -n ${cypher_shell_info_arg} ]]; then
     runCypherShellInfoCmd ${cypher_shell_info_arg} # run info cmd and exit
   fi
+
+  if [[ $? -ne 0 ]]; then
+    messageOutput "Cannot make save file directory ${save_dir}"
+    exitShell ${RCODE_NO_WRITE_PERM}
+  fi
+
    # parameter checks.  well, kinda
   return_code=${RCODE_SUCCESS} 
 
@@ -812,6 +861,10 @@ getArgs() {
   elif [[ ${save_all} == "Y" ]] && [[ ${save_cypher} == "Y" || ${save_results} = "Y" ]]; then
     messageOutput "Cannot have save all set with either save cypher or results files simultaneously."
     return_code=${RCODE_INVALID_CMD_LINE_OPTS}
+  elif [[ -n ${save_dir} && ${save_all} == "N" && ${save_cypher} == "N" && ${save_results} == "N" ]]; then
+    echo "save_dir=$save_dir";read n
+    messageOutput "Set save directory without saving cypher or results files."
+    return_code=${RCODE_INVALID_CMD_LINE_OPTS}
   elif [[ -n ${editor_to_use} && ${run_once} == "Y" ]]; then
     messageOutput "Invalid command line options.  Cannot use an editor and run once at the same time."
     return_code=${RCODE_INVALID_CMD_LINE_OPTS}
@@ -826,11 +879,6 @@ getArgs() {
     exitShell ${return_code}
   fi
 
-  if [[ ${save_all} == "Y" ]]; then # save all means save cypher / results = Y
-    save_cypher="Y"
-    save_results="Y"
-  fi
-
   if [[ ${show_cmd_line} == "Y" ]]; then # output command line args
     cmd_arg_msg="Script started with: ${coll_args}"
   fi
@@ -839,10 +887,25 @@ getArgs() {
     save_results="Y"
     save_cypher="Y"
   fi
-    # string with all the cypher-shell only command line arguments. 
-  setCypherShellCmdLine
+
+       # make sure we can write to output directory
+  if [[ ! -n ${save_dir} ]]; then 
+    save_dir="./"  # save_dir & find_dir with trailing / is not strictly needed, but looks nicer
+    find_dir="."
+    local test_file="${save_dir}testDirPermissions.${RANDOM}.txt"
+    touch ${test_file} 2>/dev/null
+    return_code=$?
+    [ ${return_code} -eq 0 ] && rm -f ${test_file}
+  else # have a directory to save output files to
+    find_dir="$(echo $1 | sed 's/\/*$//g')" # make sure no trailing /
+    save_dir="${find_dir}/"  # make sure there's a trailing /
+    mkdir -p "${save_dir}" 2>/dev/null
+    return_code=$?
+  fi
+
+  setCypherShellCmdLine  # string with all the cypher-shell only command line arguments. 
 }
- 
+
 cleanupConnectFiles() {
     # clean the temp files specific to db connection
   rm ${TMP_DB_CONN_QRY_FILE} ${TMP_DB_CONN_RES_FILE} >/dev/null 2>&1
@@ -860,39 +923,46 @@ consumeStdIn () {
 
 existingFileCnt () {
   # 1st param is the file pattern to test
-  local ret=$(printf '%0d' $(find . -name "${1}" -type f -depth 1 | wc -l ) )
+  local ret=$(printf '%0d' $(find "${1}" -name "${2}" -type f -depth 1 | wc -l ) )
   echo ${ret}
 }
 
 exitCleanUp() {
+
    # clean-up history files
+  if [[ ${return_code} -eq ${RCODE_INTERNAL_ERROR} ]]; then 
+    return
+  fi
+
   local _exist_file_cnt
   local _resultsFilePattern="${resultFilePrefix}*${RESULTS_FILE_POSTFIX}"
   local _cypherFilePattern="${cypherFilePrefix}*${QRY_FILE_POSTFIX}"
   local _msg=''
-     # current edit produced $QRY_FILE_POSTFIX file may be empty on ctl-c
-  find * -maxdepth 0 -type f -empty -name "${cypherSaveFile}"  -exec rm {} \;
 
   cleanupConnectFiles
   
-  if [[ ${save_results} == "Y" ]]; then
-    _exist_file_cnt=$(existingFileCnt "${_resultsFilePattern}") 
-    if [[ $_exist_file_cnt -ne 0 ]]; then
-      [[ ${userDefResPrefix} != "Y" ]] && _msg="with session id ${SESSION_ID}"
-      messageOutput "**** There are ${_exist_file_cnt} results files (${RESULTS_FILE_POSTFIX}) ${_msg} ****"
+  if [[ ${edit_cnt} -gt 0 ]]; then 
+      # current edit produced $QRY_FILE_POSTFIX file may be empty on ctl-c
+    find "${find_dir}" -depth 1 -type f -empty -name "${cypherSaveFile}"  -exec rm {} \;     
+    if [[ ${save_results} == "Y" ]]; then
+      _exist_file_cnt=$(existingFileCnt "${find_dir}" "${_resultsFilePattern}") 
+      if [[ $_exist_file_cnt -ne 0 ]]; then
+        [[ ${userDefResPrefix} != "Y" ]] && _msg="with session id ${SESSION_ID}"
+        messageOutput "**** There are ${_exist_file_cnt} results files (${RESULTS_FILE_POSTFIX}) ${_msg} ****"
+      fi
+    else # clean-up any errant results files
+      find "${find_dir}" -type f -depth 1 -name "${_resultsFilePattern}" -exec rm {} \;
     fi
-  else # clean-up any errant results files
-    find . -type f -depth 1 -name "${_resultsFilePattern}" -exec rm {} \;
-  fi
-
-  if [[ ${save_cypher} == "Y" ]]; then  # will not touch file launched with editor, only history files
-    _exist_file_cnt=$(existingFileCnt "${_cypherFilePattern}")
-    if [[ $_exist_file_cnt -ne 0 ]]; then
-      [[ ${userDefQryPrefix} != "Y" ]] && _msg="with session id ${SESSION_ID}"
-      messageOutput "**** There are ${_exist_file_cnt} query files (${QRY_FILE_POSTFIX}) ${_msg} ****"
+  
+    if [[ ${save_cypher} == "Y" ]]; then  # will not touch file launched with editor, only history files
+      _exist_file_cnt=$(existingFileCnt "${find_dir}" "${_cypherFilePattern}")
+      if [[ $_exist_file_cnt -ne 0 ]]; then
+         [[ ${userDefQryPrefix} != "Y" ]] && _msg="with session id ${SESSION_ID}"
+          messageOutput "**** There are ${_exist_file_cnt} query files (${QRY_FILE_POSTFIX}) ${_msg} ****"
+      fi
+    else # clean up any errant cypher query files
+      find "${find_dir}" -depth 1 -type f -name "${_cypherFilePattern}" -exec rm {} \;
     fi
-  else # clean up any errant cypher query files
-    find . -depth 1 -type f -name "${_cypherFilePattern}" -exec rm {} \;
   fi
   
   if [[ ${is_pipe} == "N" ]]; then
@@ -913,16 +983,17 @@ consumeStdIn () {
 exitShell() {
    # exit shell with return code passed in
   consumeStdIn 1 # disccard extra paste lines passed in, if any. Wait 1s for input to catch up with paste
-  if [ "${1}" -ne "${1}" ] 2>/dev/null; then # not an integer, then internal error
-    messageOutput "INTERNAL ERROR.  Sorry about that.  ${1}"
-    return_code=-1
-  elif [[ $# -eq 1 ]]; then # Ctl-C sent
-    return_code=${1}
-  else
-    return_code=${RCODE_SUCCESS}
+  if [[ ${1} -eq ${RCODE_INTERNAL_ERROR} ]]; then
+    exit ${RCODE_INTERNAL_ERROR}
+  else 
+    if [[ $# -eq 1 ]]; then 
+      return_code=${1}
+    else
+      return_code=${RCODE_SUCCESS}
+    fi
+    exitCleanUp
   fi
-  exitCleanUp
-  exit "${return_code}"
+  exit ${return_code}
 }
 
 contOrExitOnEmptyFile () {
@@ -942,9 +1013,8 @@ outputWelcomeMsg () {
 }
 
 outputQryRunMsg () {
-  clear
   if [[ ! -n "${editor_to_use}" ]]; then # header for stdin
-    messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. ${_db_msg}."
+    messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. $([[ ${edit_cnt} -ne 0 ]] && echo "Database: ${db_name}.")"
     messageOutput "        Ctl-C to terminate stdin and exit ${SHELL_NAME} without running cypher statement."
   elif [[ "${old_db_name}" != "${db_name}" && ${edit_cnt} -gt 0 ]]; then 
     messageOutput "Using Database: ${db_name}"
@@ -1036,9 +1106,9 @@ verifyCypherShell () {
   messageOutput "Connecting to database"
 
   getCypherShellLogin # get cypher-shell login credentials if needed
-  echo "${DB_VER_QRY}" > ${TMP_DB_CONN_QRY_FILE}    # get database version query
-  runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"
-  msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
+  echo "${DB_VER_QRY}" > "${TMP_DB_CONN_QRY_FILE}"    # get database version query
+  runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${save_dir}${TMP_DB_CONN_RES_FILE}"
+  msg_arr=($(tail -1 "${TMP_DB_CONN_RES_FILE}" | tr ', ' '\n')) # tr for macOS
   db_version=${msg_arr[@]:0:1}
   db_edition=${msg_arr[@]:1:1}
   db_username=${msg_arr[@]:2:1}
@@ -1050,7 +1120,7 @@ get4xDbName () {
   if [[ ${db_version} == *$'4.'* ]]; then
     echo "${DB_4x_NAME_QRY}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
     runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
-    msg_arr=($(tail -1 ${TMP_DB_CONN_RES_FILE} | tr ', ' '\n')) # tr for macOS
+    msg_arr=($(tail -1 "${TMP_DB_CONN_RES_FILE}" | tr ', ' '\n')) # tr for macOS
     db_name="${msg_arr[@]:0:1}"
     old_db_name="${db_name}"
     cleanupConnectFiles
@@ -1133,28 +1203,42 @@ generateFileNames () {
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
   
   if [[ ${userDefQryPrefix} == "Y" ]]; then
-    printf -v cypherSaveFile "%s-%02d%s" "${cypherFilePrefix}" ${file_nbr} "${QRY_FILE_POSTFIX}"
+    printf -v cypherSaveFile "%s%s-%02d%s" "${save_dir}" "${cypherFilePrefix}" ${file_nbr} "${QRY_FILE_POSTFIX}"
   else
-    printf -v cypherSaveFile "%s_%s_%s-%d%s" "${cypherFilePrefix}" "${date_stamp}" "${SESSION_ID}" ${file_nbr} "${QRY_FILE_POSTFIX}"
+    printf -v cypherSaveFile "%s%s_%s_%s-%d%s" "${save_dir}" "${cypherFilePrefix}" "${date_stamp}" "${SESSION_ID}" ${file_nbr} "${QRY_FILE_POSTFIX}"
   fi
 
   if [[ ${userDefResPrefix} == "Y" ]]; then
-    printf -v resultSaveFile "%s-%02d%s" "${resultFilePrefix}" ${file_nbr} "${RESULTS_FILE_POSTFIX}"
+    printf -v resultSaveFile "%s%s-%02d%s" "${save_dir}" "${resultFilePrefix}" ${file_nbr} "${RESULTS_FILE_POSTFIX}"
   else
-    printf -v resultSaveFile "%s_%s_%s-%d%s" "${resultFilePrefix}" "${date_stamp}" "${SESSION_ID}" ${file_nbr} "${RESULTS_FILE_POSTFIX}"
+    printf -v resultSaveFile "%s%s_%s_%s-%d%s" "${save_dir}" "${resultFilePrefix}" "${date_stamp}" "${SESSION_ID}" ${file_nbr} "${RESULTS_FILE_POSTFIX}"
   fi
 }
 
-initFiles () {
+initFilePrefix () {
+    # prefix can be passed in cypherFilePrefix, or default OUTPUT_FILES_PREFIX
+  if [[ ! -n ${cypherFilePrefix} ]]; then  
+    cypherFilePrefix="${OUTPUT_FILES_PREFIX}" 
+    userDefQryPrefix="N"
+  else
+    userDefQryPrefix="Y"
+  fi
+  if [[ ! -n ${resultFilePrefix} ]]; then  
+    resultFilePrefix="${OUTPUT_FILES_PREFIX}" 
+    userDefResPrefix="N"
+  else
+    userDefResPrefix="Y"
+  fi
+}
 
-
+initIntermediateFiles () {
   generateFileNames
 
   if [[ -n ${input_cypher_file_name} ]]; then 
     if [[ -n ${editor_to_use} ]]; then  # keep using same file in editor
       cypherEditFile="${input_cypher_file_name}"
        
-      if [[ ${save_cypher} == "Y" && -s ${save_cypher} ]]; then # save unaltered input file with a 0 file number when using an editor
+      if [[ ${save_cypher} == "Y" && -s ${input_cypher_file_name} ]]; then # save unaltered input file with a 0 file number when using an editor
         saveOrigFile=$(echo "${cypherSaveFile}" | sed -e "s/1${QRY_FILE_POSTFIX}"/0${QRY_FILE_POSTFIX}/"")
         cp "${input_cypher_file_name}" "${saveOrigFile}"
         # cp "${input_cypher_file_name}" "$(echo \""${cypherSaveFile}"\"" | sed -e \""s/1${QRY_FILE_POSTFIX}/0${QRY_FILE_POSTFIX}/"\")"
@@ -1166,7 +1250,6 @@ initFiles () {
   else
     cypherEditFile="${cypherSaveFile}"
   fi
-set +xv
 }
 
 intermediateFileHandling () {
@@ -1266,7 +1349,8 @@ trap exitShell SIGHUP SIGTERM
 
 setDefaults
 getArgs "$@"
-initIntermediateFiles
+ckSetVarValues 
+initFilePrefix
 
 [[ ${is_pipe} == "N" ]] && clear 
 
@@ -1275,7 +1359,7 @@ verifyCypherShell   # verify that can connect to cypher-shell
 get4xDbName         # get database name if using 4.x
 fmtCurrentDbCmdArg  # use 'current db' for db_cmd_arg
 outputWelcomeMsg
-initFiles           # set vars for query and results files
+initIntermediateFiles           # set vars for query and results files
 executionLoop       # execute cypher statements
 exitShell ${RCODE_SUCCESS}
 
