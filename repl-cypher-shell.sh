@@ -440,7 +440,6 @@ ckSetVarValues() {
   fi
 }
 
-
 findStr() {
   # ${1} is the string to find
   
@@ -503,6 +502,7 @@ printContinueOrExit() {
     exitShell ${cypherRetCode}
   fi
   if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
+    messageOutput
     enterYesNoQuit "<CR>q" "${_msg}Press Enter to continue, q Enter to quit. "
   fi
 }
@@ -1117,7 +1117,8 @@ verifyCypherShell () {
 
 get4xDbName () {
   # db_name not set, and 4.x ver of Neo4j
-  if [[ ${db_version} == *$'4.'* ]]; then
+
+  if [[ ${db_version} == *'4.'* ]]; then
     echo "${DB_4x_NAME_QRY}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
     runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
     msg_arr=($(tail -1 "${TMP_DB_CONN_RES_FILE}" | tr ', ' '\n')) # tr for macOS
@@ -1295,7 +1296,7 @@ getCypherText () {
       if [[ ${editor_to_use} != "vi" ]]; then
         ${editor_to_use} "${cypherEditFile}"
       else # using vi
-        if [[ ${edit_cnt} -eq 0 ]] && [[ -s ${input_cypher_file} ]]; then
+        if [[ ! -s ${input_cypher_file} ]]; then
           ${editor_to_use} ${VI_INITIAL_OPEN_OPTS} "${cypherEditFile}" # open file option +star (new file)
         else
           ${editor_to_use} "${cypherEditFile}"
