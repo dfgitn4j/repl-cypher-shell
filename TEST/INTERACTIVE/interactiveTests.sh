@@ -10,7 +10,57 @@ eval "$(grep --color=never QRY_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
 file_without_cypher="without cypher test${QRY_FILE_POSTFIX}"
 file_with_cypher="with cypher test${QRY_FILE_POSTFIX}"
 
+findStr() {
+  # ${1} is the string to find
+  
+  local _lookFor="${1}"
+  local _inThis
+  shift
+  for arg in "$@"; do _inThis="${_inThis} ${arg}"; done
+  echo "${_inThis}" | grep --extended-regexp --ignore-case --quiet -e "${_lookFor}"
+  return $?
+}
 
+enterYesNoQuit() {
+  # ${1} is valid response pattern in form of "<CR>YNQynq", <CR> defaults to Yes
+  # ${2} is the  message for the user
+  local _valid_opts
+  local _msg
+  local _ret_code
+  if [[ -z ${1} ]]; then
+    _valid_opts="<CR>YNQynq"
+  else 
+    _valid_opts="${1}"
+  fi
+  if [[ -z ${2} ]]; then 
+    _msg="<Enter> | y <Enter> to continue, n <Enter> to return, q <Enter> to quit."
+  else
+    _msg="${2}"
+  fi
+  printf "%s" "${_msg}"
+  
+  read -r option  
+  printf -v option "%.1s" "${option}" # get 1st char - no read -N 1 on osx, bummer
+  findStr "${option}" "${_valid_opts}"
+  if [[ $? -eq 1 ]]; then
+    printf "'${option}' is an invalid choice."
+    enterYesNoQuit "${_valid_opts}" "${_msg}"
+  else
+    case ${option} in
+      [Yy]) _ret_code=0 ;; 
+      [Nn]) _ret_code=1 ;;
+      [Qq]) exit ;;
+      *) 
+        if [[ -z ${option} ]]; then # press return
+          _ret_code=0
+        else
+          enterYesNoQuit "${_valid_opts}" "${_msg}"
+        fi  
+      ;;
+    esac
+    return ${_ret_code}
+  fi
+}
 
 outputFile () {
   local file_pattern="${1}"
@@ -19,7 +69,7 @@ outputFile () {
    printf '%s\n\n' "----- ${msg} file pattern: '${current_input_file}' -----" 
   for f in "$(find . -depth 1 -name "${file_pattern}" -print)"; do
     (( cnt++ ))
-    printf '%1d. File name: %s\n' ${cnt} "${f}"
+    printf '%1d. File name: %s\n' ${cnt} "'${f}'"
     cat "${f}"
     printf '\n'
   done
@@ -34,7 +84,7 @@ outputFile () {
 # declare -a params=("--vi" "--nano" "--vi --saveCypher" "--vi --saveResults" "--vi saveAll")
 declare -a params=("--vi")
 #for file_param in "" "--file '${file_without_cypher}'" "--file '${file_with_cypher}'"; do # test without and with input file
-for file_param in "--file '${file_with_cypher}'"; do # test without and with input file
+for file_param in "" "--file '${file_with_cypher}'"; do # test without and with input file
   for param in "${params[@]}"; do
     save_cypher_file="N"
     save_results_file="N" 
@@ -62,10 +112,15 @@ for file_param in "--file '${file_with_cypher}'"; do # test without and with inp
       current_input_file=""
     fi
 
+    printf "%s\n" "Starting test. Press enter to run. ${TEST_SHELL} ${param} ${file_param}"
+    enterYesNoQuit "<CR>QN" "<Enter> to run test, (n) skip, (q) to exit. " 
+    [[ $? -eq 1 ]] && continue  
+
     eval "${TEST_SHELL} ${param} ${file_param}"
     ret_val=$?
 
-    printf '%s\n' "Exit code = ${ret_val} for test parameters '${param}' file parameters '${file_param}'. ( Called with: ${TEST_SHELL} ${param} ${file_param} )"
+    printf '%s\n%s\n' "Exit code = ${ret_val} for test parameters '${param}' file parameters '${file_param}'." \
+           "( Called with: ${TEST_SHELL} ${param} ${file_param} )"
 
     if [[ -n ${current_input_file} ]]; then
       outputFile "${current_input_file}" "Input cypher file"
@@ -98,7 +153,7 @@ for file_param in "--file '${file_with_cypher}'"; do # test without and with inp
     read n
     find . -depth 1 -name "*${RESULTS_FILE_POSTFIX}" -exec rm {} \;
     find . -depth 1 -name "*${QRY_FILE_POSTFIX}" -exec rm {} \;
-    [[ -n ${current_input_file} ]] && rm "${current_input_file}"
+    [[ -f ${current_input_file} ]] && rm "${current_input_file}"
   done
 
 done

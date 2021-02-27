@@ -1296,7 +1296,7 @@ getCypherText () {
       if [[ ${editor_to_use} != "vi" ]]; then
         ${editor_to_use} "${cypherEditFile}"
       else # using vi
-        if [[ ! -s ${input_cypher_file} ]]; then
+        if [[ ! -s ${cypherEditFile} ]]; then
           ${editor_to_use} ${VI_INITIAL_OPEN_OPTS} "${cypherEditFile}" # open file option +star (new file)
         else
           ${editor_to_use} "${cypherEditFile}"
