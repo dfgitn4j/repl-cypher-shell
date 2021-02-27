@@ -1254,22 +1254,21 @@ initIntermediateFiles () {
 }
 
 intermediateFileHandling () {
-    if [[ ${save_cypher} == "N" || ${cypherRetCode} -ne 0 ]]; then
-      rm -f "${cypherSaveFile}"
+  if [[ ${save_cypher} == "N" ]]; then # remove file if not use editor and not saving (stdin)
+    [[ ! -n ${editor_to_use} ]] &&  rm -f "${cypherSaveFile}"
+  else
+    if [[ -n ${input_cypher_file_name} && -n ${editor_to_use} ]]; then # keep using same file in editor
+      cp "${cypherEditFile}" "${cypherSaveFile}" # using editor on edit file, save file is history
+      generateFileNames
+      cypherEditFile="${input_cypher_file_name}"
     else
-      if [[ -n ${input_cypher_file_name} && -n ${editor_to_use} ]]; then # keep using same file in editor
-        cp "${cypherEditFile}" "${cypherSaveFile}" # using editor on edit file, save file is history
-        generateFileNames
-        cypherEditFile="${input_cypher_file_name}"
-      else
-        generateFileNames
-        cypherEditFile="${cypherSaveFile}"
-      fi
-    fi  
-
-    if [[ ${save_results} == "N" || ${cypherRetCode} -ne 0 ]]; then
-       rm -f "${resultSaveFile}"
+      generateFileNames
+      cypherEditFile="${cypherSaveFile}"
     fi
+  fi  
+  if [[ ${save_results} == "N" || ${cypherRetCode} -ne 0 ]]; then
+     rm -f "${resultSaveFile}"
+  fi
 }
 
 getCypherText () {

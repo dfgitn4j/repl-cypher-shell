@@ -75,16 +75,14 @@ outputFile () {
   done
 }
 
-# three file scenarios:
-# 1. vi with no file name should result in 0 output files
+# three main file scenarios:
+# 1. vi / nano with no file name should result in 0 output files
 # 2. vi with supplied file name with no contents should result in 1 newly created output file
 # 3. vi with supplied file name with file contents should result in 1 output file
 
 # parameter testing scenarios
-# declare -a params=("--vi" "--nano" "--vi --saveCypher" "--vi --saveResults" "--vi saveAll")
-declare -a params=("--vi")
-#for file_param in "" "--file '${file_without_cypher}'" "--file '${file_with_cypher}'"; do # test without and with input file
-for file_param in "" "--file '${file_with_cypher}'"; do # test without and with input file
+declare -a params=("--vi" "--nano" "--vi --saveCypher" "--vi --saveResults" "--vi saveAll")
+for file_param in "" "--file '${file_without_cypher}'" "--file '${file_with_cypher}'"; do # test without and with input file
   for param in "${params[@]}"; do
     save_cypher_file="N"
     save_results_file="N" 
