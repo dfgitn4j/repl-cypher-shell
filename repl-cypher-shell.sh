@@ -575,6 +575,8 @@ getOptArgs() {
 }
 
 getArgs() {
+
+  local _tmpStr # var for intermediate strings 
   # less options --shift .01 allows left arrow to only cut off beginning "|"
   # while scrolling at the expense of slower left arrow scrolling
   less_options="${LESS_DEF_OPT}"
@@ -632,8 +634,8 @@ getArgs() {
          ;;
       -f | --file ) # cypher file name
          getOptArgs 1 "$@"
-         input_cypher_file="${_currentParam} ${arg_ret_opts}"
-         input_cypher_file_name="$(echo "${input_cypher_file}" | sed -E -e 's/(--file|-f)[[:space:]]*//')"
+         _tmpStr="${_currentParam} ${arg_ret_opts}"
+         input_cypher_file_name="$(echo "${_tmpStr}" | sed -E -e 's/(--file|-f)[[:space:]]*//')"
          shift "${arg_shift_cnt}" # go past number of params processed
          coll_args="${coll_args} ${input_cypher_file}"
          ;;
@@ -835,12 +837,7 @@ getArgs() {
   if [[ -n ${cypher_shell_info_arg} ]]; then
     runCypherShellInfoCmd ${cypher_shell_info_arg} # run info cmd and exit
   fi
-
-  if [[ $? -ne 0 ]]; then
-    messageOutput "Cannot make save file directory ${save_dir}"
-    exitShell ${RCODE_NO_WRITE_PERM}
-  fi
-
+   
    # parameter checks.  well, kinda
   return_code=${RCODE_SUCCESS} 
 
@@ -851,7 +848,7 @@ getArgs() {
     if [[ -n ${editor_to_use} ]]; then  # could do this, but why?
       messageOutput "Cannot use external editor and pipe input at the same time."
       return_code=${RCODE_INVALID_CMD_LINE_OPTS}
-    elif [[ -n ${input_cypher_file} ]]; then
+    elif [[ -n ${input_cypher_file_name} ]]; then
       messageOutput "Cannot use input file and pipe input at the same time."
       return_code=${RCODE_INVALID_CMD_LINE_OPTS}
     fi
@@ -888,7 +885,7 @@ getArgs() {
     save_cypher="Y"
   fi
 
-       # make sure we can write to output directory
+    # make sure we can write to output file / directory
   if [[ ! -n ${save_dir} ]]; then 
     save_dir="./"  # save_dir & find_dir with trailing / is not strictly needed, but looks nicer
     find_dir="."
@@ -896,11 +893,19 @@ getArgs() {
     touch ${test_file} 2>/dev/null
     return_code=$?
     [ ${return_code} -eq 0 ] && rm -f ${test_file}
+    if [[ $? -ne 0 ]]; then
+      messageOutput "Cannot write file to directory $(pwd)"
+      exitShell ${RCODE_NO_WRITE_PERM}
+    fi
   else # have a directory to save output files to
     find_dir="$(echo $1 | sed 's/\/*$//g')" # make sure no trailing /
     save_dir="${find_dir}/"  # make sure there's a trailing /
     mkdir -p "${save_dir}" 2>/dev/null
     return_code=$?
+    if [[ $? -ne 0 ]]; then
+      messageOutput "Cannot make save file directory ${save_dir}"
+      exitShell ${RCODE_NO_WRITE_PERM}
+    fi
   fi
 
   setCypherShellCmdLine  # string with all the cypher-shell only command line arguments. 
@@ -943,17 +948,7 @@ exitCleanUp() {
   
   if [[ ${edit_cnt} -gt 0 ]]; then 
       # current edit produced $QRY_FILE_POSTFIX file may be empty on ctl-c
-    find "${find_dir}" -depth 1 -type f -empty -name "${cypherSaveFile}"  -exec rm {} \;     
-    if [[ ${save_results} == "Y" ]]; then
-      _exist_file_cnt=$(existingFileCnt "${find_dir}" "${_resultsFilePattern}") 
-      if [[ $_exist_file_cnt -ne 0 ]]; then
-        [[ ${userDefResPrefix} != "Y" ]] && _msg="with session id ${SESSION_ID}"
-        messageOutput "**** There are ${_exist_file_cnt} results files (${RESULTS_FILE_POSTFIX}) ${_msg} ****"
-      fi
-    else # clean-up any errant results files
-      find "${find_dir}" -type f -depth 1 -name "${_resultsFilePattern}" -exec rm {} \;
-    fi
-  
+    find "${find_dir}" -depth 1 -type f -empty -name "${_cypherFilePattern}"  -exec rm {} \;     
     if [[ ${save_cypher} == "Y" ]]; then  # will not touch file launched with editor, only history files
       _exist_file_cnt=$(existingFileCnt "${find_dir}" "${_cypherFilePattern}")
       if [[ $_exist_file_cnt -ne 0 ]]; then
@@ -965,6 +960,16 @@ exitCleanUp() {
     fi
   fi
   
+  if [[ ${save_results} == "Y" ]]; then
+    _exist_file_cnt=$(existingFileCnt "${find_dir}" "${_resultsFilePattern}") 
+    if [[ $_exist_file_cnt -ne 0 ]]; then
+      [[ ${userDefResPrefix} != "Y" ]] && _msg="with session id ${SESSION_ID}"
+      messageOutput "**** There are ${_exist_file_cnt} results files (${RESULTS_FILE_POSTFIX}) ${_msg} ****"
+    fi
+  else # clean-up any errant results files
+    find "${find_dir}" -type f -depth 1 -name "${_resultsFilePattern}" -exec rm {} \;
+  fi
+
   if [[ ${is_pipe} == "N" ]]; then
     stty echo sane # reset stty just in case
   fi
@@ -1199,6 +1204,7 @@ cleanAndRunCypher () {
 }
 
 generateFileNames () {
+
     # generating save and results file names
   (( file_nbr++ )) # increment file nbr if saving files
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
@@ -1254,21 +1260,31 @@ initIntermediateFiles () {
 }
 
 intermediateFileHandling () {
-  if [[ ${save_cypher} == "N" ]]; then # remove file if not use editor and not saving (stdin)
-    [[ ! -n ${editor_to_use} ]] &&  rm -f "${cypherSaveFile}"
-  else
-    if [[ -n ${input_cypher_file_name} && -n ${editor_to_use} ]]; then # keep using same file in editor
-      cp "${cypherEditFile}" "${cypherSaveFile}" # using editor on edit file, save file is history
-      generateFileNames
-      cypherEditFile="${input_cypher_file_name}"
-    else
-      generateFileNames
-      cypherEditFile="${cypherSaveFile}"
-    fi
-  fi  
+
+  local _generated_new_file_names="N"  # only call generateFileNames once
+  if [[ ${cypherRetCode} -eq 0 ]];then 
+  
+    if [[ ${save_cypher} == "N" ]]; then # remove file if not use editor and not saving (stdin)
+      [[ ! -n ${editor_to_use} ]] &&  rm -f "${cypherSaveFile}"
+    else # save_cypher = "Y"
+      if [[ -n ${input_cypher_file_name} && -n ${editor_to_use} ]]; then # keep using same file in editor
+        cp "${cypherEditFile}" "${cypherSaveFile}" # using editor on edit file, save file is history
+        generateFileNames
+        cypherEditFile="${input_cypher_file_name}"
+      else
+        generateFileNames
+        cypherEditFile="${cypherSaveFile}"
+      fi
+      _generated_new_file_names="Y"
+    fi  
+  fi # cypherRetCode is 0
+    
   if [[ ${save_results} == "N" || ${cypherRetCode} -ne 0 ]]; then
-     rm -f "${resultSaveFile}"
+    rm -f "${resultSaveFile}"
+  elif [[ ${save_results} == "Y" && ${_generated_new_file_names} == "N" ]]; then 
+    generateFileNames # new file names not generated w save_cypher=Y
   fi
+
 }
 
 getCypherText () {
