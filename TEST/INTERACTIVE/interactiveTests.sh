@@ -1,8 +1,7 @@
 #set -xv 
-# command line options to test that require keyboard input
 
-# get results file postfix
 TEST_SHELL="../../repl-cypher-shell.sh"
+# get results file postfix
 eval "$(grep --color=never RESULTS_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
 eval "$(grep --color=never QRY_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
 
@@ -21,37 +20,48 @@ findStr() {
   return $?
 }
 
+findChar() {
+   # match only the first first character of $1  
+   # $2 is pattern to match, e.g. 'yqn'
+  [[ $# -ne 2 ]] &&  exitShell ${RCODE_INTERNAL_ERROR}  # require 2 parameters
+
+  printf -v _lookFor "%.1s" "${1}"
+  local _inThis="${2}"
+  echo "${_lookFor}" | grep --extended-regexp --ignore-case --quiet -e "${_inThis}"
+  retVal=$?
+  return $?
+}
+
+exitShell() {
+  removeOutputFiles
+  exit
+}
+
 enterYesNoQuit() {
-  # ${1} is valid response pattern in form of "<CR>YNQynq", <CR> defaults to Yes
+  # ${1} is valid response pattern in form of "YNQynq", <CR> defaults to Yes
   # ${2} is the  message for the user
-  local _valid_opts
-  local _msg
+  # a little risky since $1 and $2 can be optional
   local _ret_code
-  if [[ -z ${1} ]]; then
-    _valid_opts="<CR>YNQynq"
-  else 
-    _valid_opts="${1}"
-  fi
-  if [[ -z ${2} ]]; then 
-    _msg="<Enter> | y <Enter> to continue, n <Enter> to return, q <Enter> to quit."
-  else
-    _msg="${2}"
-  fi
+  local _option
+
+  [[ ${is_pipe} == "Y" ]] && return # pipe, no inteactive input
+
+  local _valid_opts="${1:-ynq}"
+  local _msg=${2:-"<Enter> | y <Enter> to continue, n <Enter> to return, q <Enter> to quit."}
   printf "%s" "${_msg}"
   
-  read -r option  
-  printf -v option "%.1s" "${option}" # get 1st char - no read -N 1 on osx, bummer
-  findStr "${option}" "${_valid_opts}"
-  if [[ $? -eq 1 ]]; then
-    printf "'${option}' is an invalid choice."
+  read -r _option  
+  findChar "${_option}" "${_valid_opts}"
+  if [[ $? -ne 0 ]]; then
+    printf "'${_option}' is an invalid choice."
     enterYesNoQuit "${_valid_opts}" "${_msg}"
   else
-    case ${option} in
+    case ${_option} in
       [Yy]) _ret_code=0 ;; 
       [Nn]) _ret_code=1 ;;
-      [Qq]) exit ;;
+      [Qq]) exitShell ;;
       *) 
-        if [[ -z ${option} ]]; then # press return
+        if [[ -z ${_option} ]]; then # press return
           _ret_code=0
         else
           enterYesNoQuit "${_valid_opts}" "${_msg}"
@@ -62,6 +72,12 @@ enterYesNoQuit() {
   fi
 }
 
+existingFileCnt () {
+  # 1st param is the file pattern to test
+  local ret=$(printf '%0d' $(find "${1}" -name "${2}" -type f -depth 1 | wc -l ) )
+  echo ${ret}
+}
+
 outputFile () {
   local file_pattern="${1}"
   local msg="${2}"
@@ -70,55 +86,92 @@ outputFile () {
   for f in "$(find . -depth 1 -name "${file_pattern}" -print)"; do
     (( cnt++ ))
     printf '%1d. File name: %s\n' ${cnt} "'${f}'"
-    cat "${f}"
-    printf '\n'
+    cat "${f}" | sed -E 's/^/  /'
+    printf '\n-----\n\n'
   done
 }
 
+removeOutputFiles () {
+  local qryFileCnt=$(existingFileCnt "." "*${QRY_FILE_POSTFIX}")
+  local resFileCnt=$(existingFileCnt "." "*${RESULTS_FILE_POSTFIX}")
+
+  if [[ $(( qryFileCnt+resFileCnt )) -gt 0 ]]; then
+    printf '%s' "Press enter delete ${qryFileCnt} qry files, and ${resFileCnt} results files to continue."
+    read n
+    find . -depth 1 -name "*${RESULTS_FILE_POSTFIX}" -exec rm {} \;
+    find . -depth 1 -name "*${QRY_FILE_POSTFIX}" -exec rm {} \;
+  fi 
+  [[ -f ${current_input_file} ]] && rm "${current_input_file}"
+}
+
+runTestShell () {
+  local _execute_mode="${1:-one}"
+  local _desc="${2:-}"
+    
+  printf "\n%s\n" "${_desc}Press Enter to run: ${TEST_SHELL} ${currentCmdLineParam} ${currentFileParam}"
+  enterYesNoQuit "qn" "<Enter> to run test, (n) skip, (q) to exit. "
+  if [[ $? -eq 1 ]]; then # skipping
+    [[ ${_execute_mode} == "loop" ]] && continue || return
+  fi
+
+  eval "${TEST_SHELL} ${currentCmdLineParam} ${currentFileParam}"
+  ret_val=$?
+
+  printf '\n%s\n' "Exit code = ${ret_val} Called with: ${TEST_SHELL} ${currentCmdLineParam} ${currentFileParam}"
+  removeOutputFiles
+}
+
+# Main loop
+declare -a callingParams  # command line parameter array for each test
+declare -a fileParams     # file save command line parameters for each test
+
+clear 
+
+# Individual tests
+printf '\n%s\n' "=== Individual on-and-done tests ==="
+currentCmdLineParam=""; runTestShell "one" "No parameters, using stdin. "
+currentCmdLineParam="--one"; runTestShell "one" "Run once then done. "
+currentCmdLineParam="--exitOnError"; runTestShell "one" "Cypher should error and exit. "
+currentCmdLineParam="--exitOnError --saveAll"; runTestShell "one" "Cypher should error and exit. No save files on error. "
+
+# parameter testing scenarios
 # three main file scenarios:
 # 1. vi / nano with no file name should result in 0 output files
 # 2. vi with supplied file name with no contents should result in 1 newly created output file
 # 3. vi with supplied file name with file contents should result in 1 output file
 
-# parameter testing scenarios
-declare -a params=("--vi" "--nano" "--vi --saveCypher" "--vi --saveResults" "--vi --saveAll")
-for file_param in "" "--file '${file_without_cypher}'" "--file '${file_with_cypher}'"; do # test without and with input file
-  for param in "${params[@]}"; do
+printf '\n%s\n\n' "=== Starting loop through file and calling parameters ==="
+fileParams=("" "--file '${file_without_cypher}'" "--file '${file_with_cypher}'")
+callingParams=("--vi" "--nano" "--vi --saveCypher" "--vi --saveResults" "--vi --saveAll")
+for currentFileParam in "${fileParams[@]}"; do # test without and with input file
+  for currentCmdLineParam in "${callingParams[@]}"; do
     save_cypher_file="N"
     save_results_file="N" 
     min_file_cnt=0 # minimum number of output files
     qry_file_cnt=0 # number of cypher query files
     res_file_cnt=0 # number of results files
   
-    if [[ -n ${file_param} ]]; then # non blank --file parameter given
-      if [[ ${file_param} == *${file_with_cypher}* ]]; then # have cypher file 
+    if [[ -n ${currentFileParam} ]]; then # non blank --file parameter given
+      if [[ ${currentFileParam} == *${file_with_cypher}* ]]; then # have cypher file 
         echo "MATCH (n) RETURN n LIMIT 5" > "${file_with_cypher}"
         current_input_file="${file_with_cypher}"
       else # empty file. vi should start in insert mode
         current_input_file="${file_without_cypher}"
       fi
-      if [[ "--saveCypher" == *${params}* || "--saveAll" == *${params}* ]]; then
+      if [[ "--saveCypher" == *${callingParams}* || "--saveAll" == *${callingParams}* ]]; then
         save_cypher_file="Y"
         (( min_file_cnt++ ))
       fi
     
-      if [[ "--saveResults" == *${params}* || "--saveAll" == *${params}* ]]; then
+      if [[ "--saveResults" == *${callingParams}* || "--saveAll" == *${callingParams}* ]]; then
         save_results_file="Y" 
         (( min_file_cnt++ ))
       fi
     else
       current_input_file=""
     fi
-
-    printf "%s\n" "Starting test. Press enter to run. ${TEST_SHELL} ${param} ${file_param}"
-    enterYesNoQuit "<CR>QN" "<Enter> to run test, (n) skip, (q) to exit. " 
-    [[ $? -eq 1 ]] && continue  
-
-    eval "${TEST_SHELL} ${param} ${file_param}"
-    ret_val=$?
-
-    printf '%s\n%s\n' "Exit code = ${ret_val} for test parameters '${param}' file parameters '${file_param}'." \
-           "( Called with: ${TEST_SHELL} ${param} ${file_param} )"
+  
+    runTestShell "loop" # runtest, using $TEST_SHELL, $callingParams and $currentFileParam variables.
 
     if [[ -n ${current_input_file} ]]; then
       outputFile "${current_input_file}" "Input cypher file"
@@ -147,11 +200,7 @@ for file_param in "" "--file '${file_without_cypher}'" "--file '${file_with_cyph
       printf '%s %1d %s\n' "  Found " ${qry_file_cnt} " query files: $(find . -depth 1 -name "*${QRY_FILE_POSTFIX}" -print)"
       printf '%s %1d %s\n' "  Found " ${res_file_cnt} " results files: $(find . -depth 1 -name "*${RESULTS_FILE_POSTFIX}" -print)"
     fi 
-    printf '%s' "Press enter delete output files and to continue."
-    read n
-    find . -depth 1 -name "*${RESULTS_FILE_POSTFIX}" -exec rm {} \;
-    find . -depth 1 -name "*${QRY_FILE_POSTFIX}" -exec rm {} \;
-    [[ -f ${current_input_file} ]] && rm "${current_input_file}"
+
   done
 
 done

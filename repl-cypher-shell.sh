@@ -398,9 +398,10 @@ setDefaults () {
 
   [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"   # pipe input?
 
-  edit_cnt=0        # count number of queries run, controls stdin messaging.
-  file_nbr=0        # output file number if query / results file(s) are saved
+  edit_cnt=0          # count number of queries run, controls stdin messaging.
+  file_nbr=0          # output file number if query / results file(s) are saved
   # db_name=""        # will only be populated on neo4j 4.x databases
+  lastCypherFile="" # last cypher file will not be blank if using editor and saving files
   CS_FORMAT_OPT="--format verbose " # need extra space at end for param validation test
   LESS_DEF_OPT="--LONG-PROMPT --shift .005"
   VI_INITIAL_OPEN_OPTS=' +star '  # Start first exec for vi in append mode.
@@ -437,87 +438,6 @@ ckSetVarValues() {
   else # add $save_dir directory prefix to tmp variables
     TMP_DB_CONN_QRY_FILE="${save_dir}tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
     TMP_DB_CONN_RES_FILE="${save_dir}tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
-  fi
-}
-
-findStr() {
-  # ${1} is the string to find
-  
-  local _lookFor="${1}"
-  local _inThis
-  shift
-  for arg in "$@"; do _inThis="${_inThis} ${arg}"; done
-  echo "${_inThis}" | grep --extended-regexp --ignore-case --quiet -e "${_lookFor}"
-  return $?
-}
-
-enterYesNoQuit() {
-  # ${1} is valid response pattern in form of "<CR>YNQynq", <CR> defaults to Yes
-  # ${2} is the  message for the user
-  local _valid_opts
-  local _msg
-  local _ret_code
-  if [[ ${is_pipe} == "N" ]]; then
-    if [[ -z ${1} ]]; then
-      _valid_opts="<CR>YNQynq"
-    else 
-      _valid_opts="${1}"
-    fi
-    if [[ -z ${2} ]]; then 
-      _msg="<Enter> | y <Enter> to continue, n <Enter> to return, q <Enter> to quit."
-    else
-      _msg="${2}"
-    fi
-    printf "%s" "${_msg}"
-    
-    read -r option  
-    printf -v option "%.1s" "${option}" # get 1st char - no read -N 1 on osx, bummer
-    findStr "${option}" "${_valid_opts}"
-    if [[ $? -eq 1 ]]; then
-      messageOutput "'${option}' is an invalid choice."
-      enterYesNoQuit "${_valid_opts}" "${_msg}"
-    else
-      case ${option} in
-        [Yy]) _ret_code=0 ;; 
-        [Nn]) _ret_code=1 ;;
-        [Qq]) exitShell ;;
-        *) 
-          if [[ -z ${option} ]]; then # press return
-            _ret_code=0
-          else
-            enterYesNoQuit "${_valid_opts}" "${_msg}"
-          fi  
-        ;;
-      esac
-
-      return ${_ret_code}
-    fi
-  fi
-}
-
-printContinueOrExit() {
-  # $1 is optional message
-  local _msg=${1:-""}
-  if [[ ${run_once} == "Y" ]]; then # ctl-c; don't give option to continue
-    exitShell ${cypherRetCode}
-  fi
-  if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
-    messageOutput
-    enterYesNoQuit "<CR>q" "${_msg}Press Enter to continue, q Enter to quit. "
-  fi
-}
-
-messageOutput() {  # to print or not to print
-  # Not all messages to to output, some go to tty and results file to stdout
-  # $1 is message $2 is optional format string for printf
-  local _quote_string=${2:-"Y"}
-  local _fmt_str=${3:-"%s\n"}
-  if [[ ${quiet_output} == "N" && ${is_pipe} == "N"  ]]; then
-    if [[ ${_quote_string} == "Y" ]]; then
-      printf "${_fmt_str}" "${1}"  # quotes means print on one line (default)
-    else
-      printf "${_fmt_str}" ${1}  # no quotes to allow for space delimited output
-    fi
   fi
 }
 
@@ -870,10 +790,33 @@ getArgs() {
     return_code=${RCODE_MISSING_INPUT_FILE}
   fi
 
-  if [[ ${return_code} -ne 0 ]]; then
+  if [[ ${return_code} -ne 0 ]]; then # exit if any of the above fail
     messageOutput "Command line parameters passed to cypher-shell: ${coll_args}"
     messageOutput "Good Bye."
     exitShell ${return_code}
+  fi
+    # make sure we can write to output file / directory
+  if [[ ! -n ${save_dir} ]]; then 
+    save_dir="./"  # save_dir & find_dir with trailing / is not strictly needed, but looks nicer
+    find_dir="."
+    local test_file="${save_dir}testDirPermissions.${RANDOM}.txt"
+    touch ${test_file} 2>/dev/null
+    return_code=$?
+    if [[ ${return_code} -ne 0 ]]; then
+      messageOutput "Cannot write file to directory $(pwd)"
+      exitShell ${RCODE_NO_WRITE_PERM}
+    else # can write file
+      rm -f ${test_file}
+    fi
+  else # have a directory to save output files to
+    find_dir="$(echo $1 | sed 's/\/*$//g')" # make sure no trailing /
+    save_dir="${find_dir}/"  # make sure there's a trailing /
+    mkdir -p "${save_dir}" 2>/dev/null
+    return_code=$?
+    if [[ ${return_code} -ne 0 ]]; then
+      messageOutput "Cannot make save file directory ${save_dir}"
+      exitShell ${RCODE_NO_WRITE_PERM}
+    fi
   fi
 
   if [[ ${show_cmd_line} == "Y" ]]; then # output command line args
@@ -885,30 +828,97 @@ getArgs() {
     save_cypher="Y"
   fi
 
-    # make sure we can write to output file / directory
-  if [[ ! -n ${save_dir} ]]; then 
-    save_dir="./"  # save_dir & find_dir with trailing / is not strictly needed, but looks nicer
-    find_dir="."
-    local test_file="${save_dir}testDirPermissions.${RANDOM}.txt"
-    touch ${test_file} 2>/dev/null
-    return_code=$?
-    [ ${return_code} -eq 0 ] && rm -f ${test_file}
-    if [[ $? -ne 0 ]]; then
-      messageOutput "Cannot write file to directory $(pwd)"
-      exitShell ${RCODE_NO_WRITE_PERM}
+  setCypherShellCmdLine  # string with all the cypher-shell only command line arguments. 
+}
+
+findStr() {
+  # called with pattern findStr 'valid pattern(s)' 'test strings'. e.g. findStr 'yqn' "y n q X"
+  # looking for y,n,q,X in string 'yqn'. return 1 if looking for string is not
+  # there, e.g. invalid options. leverages --word-regexp so spaces have meaning
+
+  local _inThis="${1}" # 
+  shift
+  arr=($@)
+  for _lookFor in "${arr[@]}" ; do
+    echo "${_inThis}" | grep --word-regexp --extended-regexp --ignore-case --quiet -e "${_lookFor}"
+    if [[ $? -ne 0 ]]; then # not found, exit
+      return 1
     fi
-  else # have a directory to save output files to
-    find_dir="$(echo $1 | sed 's/\/*$//g')" # make sure no trailing /
-    save_dir="${find_dir}/"  # make sure there's a trailing /
-    mkdir -p "${save_dir}" 2>/dev/null
-    return_code=$?
-    if [[ $? -ne 0 ]]; then
-      messageOutput "Cannot make save file directory ${save_dir}"
-      exitShell ${RCODE_NO_WRITE_PERM}
+  done
+  return 0
+}
+
+findChar() {
+   # match only the first first character of $1  
+   # $2 is pattern to match, e.g. 'yqn'
+  [[ $# -ne 2 ]] &&  exitShell ${RCODE_INTERNAL_ERROR}  # require 2 parameters
+
+  printf -v _lookFor "%.1s" "${1}"
+  local _inThis="${2}"
+  echo "${_lookFor}" | grep --extended-regexp --ignore-case --quiet -e "${_inThis}"
+  retVal=$?
+  return $?
+}
+
+enterYesNoQuit() {
+  # ${1} is valid response pattern in form of "YNQynq", <CR> defaults to Yes
+  # ${2} is the  message for the user
+  # a little risky since $1 and $2 can be optional
+  local _ret_code
+  local _option
+
+  [[ ${is_pipe} == "Y" ]] && return # pipe, no inteactive input
+
+  local _valid_opts="${1:-ynq}"
+  local _msg=${2:-"<Enter> | y <Enter> to continue, n <Enter> to return, q <Enter> to quit."}
+  printf "%s" "${_msg}"
+  
+  read -r _option  
+  findChar "${_option}" "${_valid_opts}"
+  if [[ $? -ne 0 ]]; then
+    messageOutput "'${_option}' is an invalid choice."
+    enterYesNoQuit "${_valid_opts}" "${_msg}"
+  else
+    case ${_option} in
+      [Yy]) _ret_code=0 ;; 
+      [Nn]) _ret_code=1 ;;
+      [Qq]) exitShell ;;
+      *) 
+        if [[ -z ${_option} ]]; then # press return
+          _ret_code=0
+        else
+          enterYesNoQuit "${_valid_opts}" "${_msg}"
+        fi  
+      ;;
+    esac
+    return ${_ret_code}
+  fi
+}
+
+printContinueOrExit() {
+  # $1 is optional message
+  local _msg=${1:-""}
+  if [[ ${run_once} == "Y" ]]; then # ctl-c; don't give option to continue
+    exitShell ${cypherRetCode}
+  fi
+  if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
+    messageOutput
+    enterYesNoQuit "q" "${_msg}Press Enter to continue, q Enter to quit. "
+  fi
+}
+
+messageOutput() {  # to print or not to print
+  # Not all messages to to output, some go to tty and results file to stdout
+  # $1 is message $2 is optional format string for printf
+  local _quote_string=${2:-"Y"}
+  local _fmt_str=${3:-"%s\n"}
+  if [[ ${quiet_output} == "N" && ${is_pipe} == "N"  ]]; then
+    if [[ ${_quote_string} == "Y" ]]; then
+      printf "${_fmt_str}" "${1}"  # quotes means print on one line (default)
+    else
+      printf "${_fmt_str}" ${1}  # no quotes to allow for space delimited output
     fi
   fi
-
-  setCypherShellCmdLine  # string with all the cypher-shell only command line arguments. 
 }
 
 cleanupConnectFiles() {
@@ -927,13 +937,12 @@ consumeStdIn () {
 }
 
 existingFileCnt () {
-  # 1st param is the file pattern to test
+  # $1 is directory, $2 is pattern
   local ret=$(printf '%0d' $(find "${1}" -name "${2}" -type f -depth 1 | wc -l ) )
   echo ${ret}
 }
 
 exitCleanUp() {
-
    # clean-up history files
   if [[ ${return_code} -eq ${RCODE_INTERNAL_ERROR} ]]; then 
     return
@@ -1203,9 +1212,24 @@ cleanAndRunCypher () {
   fi
 }
 
-generateFileNames () {
+initFilePrefix () {
+  # prefix can be passed in cypherFilePrefix, or default OUTPUT_FILES_PREFIX
+  if [[ ! -n ${cypherFilePrefix} ]]; then  
+    cypherFilePrefix="${OUTPUT_FILES_PREFIX}" 
+    userDefQryPrefix="N"
+  else
+    userDefQryPrefix="Y"
+  fi
+  if [[ ! -n ${resultFilePrefix} ]]; then  
+    resultFilePrefix="${OUTPUT_FILES_PREFIX}" 
+    userDefResPrefix="N"
+  else
+    userDefResPrefix="Y"
+  fi
+}
 
-    # generating save and results file names
+generateFileNames () {
+  # generating save and results file names
   (( file_nbr++ )) # increment file nbr if saving files
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
   
@@ -1222,26 +1246,10 @@ generateFileNames () {
   fi
 }
 
-initFilePrefix () {
-    # prefix can be passed in cypherFilePrefix, or default OUTPUT_FILES_PREFIX
-  if [[ ! -n ${cypherFilePrefix} ]]; then  
-    cypherFilePrefix="${OUTPUT_FILES_PREFIX}" 
-    userDefQryPrefix="N"
-  else
-    userDefQryPrefix="Y"
-  fi
-  if [[ ! -n ${resultFilePrefix} ]]; then  
-    resultFilePrefix="${OUTPUT_FILES_PREFIX}" 
-    userDefResPrefix="N"
-  else
-    userDefResPrefix="Y"
-  fi
-}
-
 initIntermediateFiles () {
   generateFileNames
 
-  if [[ -n ${input_cypher_file_name} ]]; then 
+  if [[ -n ${input_cypher_file_name} ]]; then # have cypher input file
     if [[ -n ${editor_to_use} ]]; then  # keep using same file in editor
       cypherEditFile="${input_cypher_file_name}"
        
@@ -1255,12 +1263,16 @@ initIntermediateFiles () {
       cp "${input_cypher_file_name}" "${cypherEditFile}"
     fi
   else
+
     cypherEditFile="${cypherSaveFile}"
   fi
 }
 
 intermediateFileHandling () {
-
+  # manage intermediate save files
+  # using editor
+  # using editor with save file options
+  # stdin
   local _generated_new_file_names="N"  # only call generateFileNames once
   if [[ ${cypherRetCode} -eq 0 ]];then 
   
@@ -1271,7 +1283,12 @@ intermediateFileHandling () {
         cp "${cypherEditFile}" "${cypherSaveFile}" # using editor on edit file, save file is history
         generateFileNames
         cypherEditFile="${input_cypher_file_name}"
-      else
+      elif [[ -n ${editor_to_use} ]]; then # using an editor on generated file names
+        lastCypherFile="${cypherEditFile}"
+        generateFileNames
+        cp "${lastCypherFile}" "${cypherSaveFile}"
+        cypherEditFile="${cypherSaveFile}"
+      else # use blank, new files
         generateFileNames
         cypherEditFile="${cypherSaveFile}"
       fi
@@ -1285,6 +1302,7 @@ intermediateFileHandling () {
     generateFileNames # new file names not generated w save_cypher=Y
   fi
 
+  [[ ! -n ${editor_to_use} ]] && cat /dev/null > "${cypherEditFile}" # using stdin, blank out cypher
 }
 
 getCypherText () {
@@ -1318,7 +1336,7 @@ getCypherText () {
         fi
       fi
       outputQryRunMsg  # ask user if they want to run file or go back to edit
-      enterYesNoQuit "<CR>QN" "<Enter> to run query, (n) to continue to edit, (q) to exit ${SHELL_NAME} " 
+      enterYesNoQuit "qn" "<Enter> to run query, (n) to continue to edit, (q) to exit ${SHELL_NAME} " 
       if [[ $? -eq 1 ]]; then # answered 'n', continue
         continue  # go back to edit on same file
       else # answered yes to running query
@@ -1337,7 +1355,7 @@ executionLoop () {
     cleanAndRunCypher 
     intermediateFileHandling  # intermediate files for cypher and output
 
-    if [[ ${exit_on_error} == "Y" ]]; then # print error and exit
+    if [[ ${cypherRetCode} -ne 0 && ${exit_on_error} == "Y" ]]; then # print error and exit
       exitShell ${cypherRetCode} # ERROR running cypher code
     elif [[ ${run_once} == "Y" || ${is_pipe} == "Y" ]]; then # exit shell if run 1, or is from a pipe
       exitShell ${cypherRetCode}
