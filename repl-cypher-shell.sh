@@ -848,33 +848,32 @@ findStr() {
   return 0
 }
 
-findChar() {
+validFirstChar() {
    # match only the first first character of $1  
    # $2 is pattern to match, e.g. 'yqn'
   [[ $# -ne 2 ]] &&  exitShell ${RCODE_INTERNAL_ERROR}  # require 2 parameters
 
   printf -v _lookFor "%.1s" "${1}"
   local _inThis="${2}"
-  echo "${_lookFor}" | grep --extended-regexp --ignore-case --quiet -e "${_inThis}"
+  echo "${_inThis}" | grep --extended-regexp --ignore-case --quiet -e "${_lookFor}"
   retVal=$?
-  return $?
 }
 
 enterYesNoQuit() {
   # ${1} is valid response pattern in form of "YNQynq", <CR> defaults to Yes
   # ${2} is the  message for the user
   # a little risky since $1 and $2 can be optional
-  local _ret_code
+  local _ret_code=0
   local _option
 
   [[ ${is_pipe} == "Y" ]] && return # pipe, no inteactive input
 
   local _valid_opts="${1:-ynq}"
   local _msg=${2:-"<Enter> | y <Enter> to continue, n <Enter> to return, q <Enter> to quit."}
-  printf "%s" "${_msg}"
+  messageOutput "${_msg}" "Y" "\n%s"
   
-  read -r _option  
-  findChar "${_option}" "${_valid_opts}"
+  read -r _option 
+  validFirstChar "${_option}" "${_valid_opts}"
   if [[ $? -ne 0 ]]; then
     messageOutput "'${_option}' is an invalid choice."
     enterYesNoQuit "${_valid_opts}" "${_msg}"
@@ -891,19 +890,20 @@ enterYesNoQuit() {
         fi  
       ;;
     esac
-    return ${_ret_code}
   fi
+  return ${_ret_code}
 }
 
-printContinueOrExit() {
+continueOrExit() {
   # $1 is optional message
   local _msg=${1:-""}
   if [[ ${run_once} == "Y" ]]; then # ctl-c; don't give option to continue
     exitShell ${cypherRetCode}
   fi
-  if [[ ${is_pipe} == "N" && ${quiet_output} == "N" ]]; then
-    messageOutput
+  if [[ ${is_pipe} == "N" ]]; then
+    # messageOutput
     enterYesNoQuit "q" "${_msg}Press Enter to continue, q Enter to quit. "
+    outputQryRunMsg
   fi
 }
 
@@ -943,7 +943,7 @@ existingFileCnt () {
 }
 
 exitCleanUp() {
-   # clean-up history files
+  # clean-up history files
   if [[ ${return_code} -eq ${RCODE_INTERNAL_ERROR} ]]; then 
     return
   fi
@@ -958,7 +958,7 @@ exitCleanUp() {
   if [[ ${edit_cnt} -gt 0 ]]; then 
       # current edit produced $QRY_FILE_POSTFIX file may be empty on ctl-c
     find "${find_dir}" -depth 1 -type f -empty -name "${_cypherFilePattern}"  -exec rm {} \;     
-    if [[ ${save_cypher} == "Y" ]]; then  # will not touch file launched with editor, only history files
+    if [[ ${save_cypher} == "Y" || -s ${input_cypher_file_name} ]]; then  # will not touch file launched with editor, only history files
       _exist_file_cnt=$(existingFileCnt "${find_dir}" "${_cypherFilePattern}")
       if [[ $_exist_file_cnt -ne 0 ]]; then
          [[ ${userDefQryPrefix} != "Y" ]] && _msg="with session id ${SESSION_ID}"
@@ -1012,7 +1012,7 @@ exitShell() {
 
 contOrExitOnEmptyFile () {
   cypherRetCode=${RCODE_EMPTY_INPUT} # do not run cypher, trigger continue or exit msg
-  printContinueOrExit "Empty input. No cypher to run."
+  continueOrExit "Empty input. No cypher to run. "
 }
 
 outputWelcomeMsg () {
@@ -1027,12 +1027,16 @@ outputWelcomeMsg () {
 }
 
 outputQryRunMsg () {
-  if [[ ! -n "${editor_to_use}" ]]; then # header for stdin
-    messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. $([[ ${edit_cnt} -ne 0 ]] && echo "Database: ${db_name}.")"
-    messageOutput "        Ctl-C to terminate stdin and exit ${SHELL_NAME} without running cypher statement."
-  elif [[ "${old_db_name}" != "${db_name}" && ${edit_cnt} -gt 0 ]]; then 
-    messageOutput "Using Database: ${db_name}"
-    old_db_name="${db_name}"
+  if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
+    if [[ ! -n "${editor_to_use}" ]]; then # header for stdin
+      clear
+      [[ ${edit_cnt} -eq 0 ]] && outputWelcomeMsg
+      messageOutput "==> USE Ctl-D on a blank line to execute cypher statement. $([[ ${edit_cnt} -ne 0 ]] && echo "Database: ${db_name}.")"
+      messageOutput "        Ctl-C to terminate stdin and exit ${SHELL_NAME} without running cypher statement."
+    elif [[ "${old_db_name}" != "${db_name}" && ${edit_cnt} -gt 0 ]]; then 
+      messageOutput "Using Database: ${db_name}"
+      old_db_name="${db_name}"
+    fi
   fi
 }
 
@@ -1310,9 +1314,7 @@ getCypherText () {
   if [[ -n ${input_cypher_file_name} && ${run_once} == "Y" ]]; then
     return
   elif [[ ! -n ${editor_to_use} ]]; then # using stdin
-    if [[ ${is_pipe} == "N" ]]; then # input is from a pipe
-      outputQryRunMsg # output run query header
-    fi
+    outputQryRunMsg # output run query header
       
     if [[ -s ${cypherEditFile} ]]; then 
       cat "${cypherEditFile}"  # output existing text
@@ -1363,7 +1365,7 @@ executionLoop () {
 
     if [[ -n ${editor_to_use} ]]; then # don't go straight back into editor
       outputQryRunMsg
-      printContinueOrExit "Using ${editor_to_use} to edit. "
+      continueOrExit "Using ${editor_to_use} to edit. "
     fi
   done
 }
@@ -1378,7 +1380,7 @@ setopt SH_WORD_SPLIT >/dev/null 2>&1
 set -o pipefail
 SHELL_NAME=${0##*/}  # shell name must be set in main to avoid zsh / bash diffs
 
-trap printContinueOrExit SIGINT 
+trap continueOrExit SIGINT 
 trap exitShell SIGHUP SIGTERM 
 
 setDefaults
@@ -1392,7 +1394,6 @@ haveCypherShell     # verify that you can reach a cypher-shell executable
 verifyCypherShell   # verify that can connect to cypher-shell
 get4xDbName         # get database name if using 4.x
 fmtCurrentDbCmdArg  # use 'current db' for db_cmd_arg
-outputWelcomeMsg
 initIntermediateFiles           # set vars for query and results files
 executionLoop       # execute cypher statements
 exitShell ${RCODE_SUCCESS}
