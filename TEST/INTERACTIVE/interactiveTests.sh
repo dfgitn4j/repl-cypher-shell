@@ -161,10 +161,10 @@ fi
 # 3. vi with supplied file name with file contents should result in 1 output file
 
 printf '\n%s\n' "=== Starting loop through file and calling parameters ==="
-#fileParams=("" "--file '${file_without_cypher}'" "--file '${file_with_cypher}'")
-#callingParams=("--vi" "--vi --saveCypher" "--vi --saveResults" "--vi --saveAll")
-fileParams=("--file '${file_without_cypher}'" )
-callingParams=("--vi --saveCypher" "--vi --saveResults" "--vi --saveAll")
+fileParams=("" "--file '${file_without_cypher}'" "--file '${file_with_cypher}'")
+callingParams=("" "--vi" "--vi --saveCypher" "--vi --saveResults" "--vi --saveAll")
+#fileParams=("--file '${file_without_cypher}'" )
+#callingParams=("--vi --saveCypher" "--vi --saveResults" "--vi --saveAll")
 for currentFileParam in "${fileParams[@]}"; do # test without and with input file
   for currentCmdLineParam in "${callingParams[@]}"; do
     save_cypher_file="N"
