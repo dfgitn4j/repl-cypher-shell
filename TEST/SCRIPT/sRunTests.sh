@@ -1,4 +1,3 @@
-# set -xv
 # set -e  # exit on error 
 # test parameters in script.  Simpler than using expect
 #
@@ -116,8 +115,8 @@ printOutput () {
  #24. PASS  Exit Code: 0  Exp Code: 0 Input: STDIN Err Msg:   Desc: uid/pw tests - using -u and and -p arguments
  # PASS  Exit Code: 0  Exp Code: 0 Input: not providedErr Msg:   Desc: 
 
-  printf "%s  Exit Code: %d  Exp Code: %d Input: %-6s Err Msg: %-6s Shell: %-4s Desc: %s\n" \
-         ${msg} ${actualRetCode} ${expectedRetCode} "${type}" "${secondErrorMsg}" "${shellToUse}" "${desc}"
+  printf "%s  Exit Code: %d  Exp Code: %d Input: %-6s Shell: %-4s Desc: %s\n" \
+         "${msg}" "${actualRetCode}" "${expectedRetCode}" "${type}" "${shellToUse}" "${desc}"
   printf "%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
          ${msg} ${actualRetCode} ${expectedRetCode} ${type} \
          ${errVarNames[@]:${actualRetCode}:1} ${errVarNames[@]:${expectedRetCode}:1}  \
@@ -200,6 +199,9 @@ runShell () {
         ! -n ${nbrFiles+x} || ! -n ${grepPattern+x} ]]; then
     errMsg="*** ERROR *** Missing required parameter(s) to function runShell."
     exitParamError
+  elif [[ ${type} != "STDIN" && ${type} != "PIPE" && ${type} != "FILE" ]]; then
+    errMsg="*** ERROR *** Invalid input type option: ${type}"
+    exitParamError
   fi
 
   secondErrorMsg="" # error not triggered by an invalid return code
@@ -208,22 +210,16 @@ runShell () {
   printf "%02d. " $(( ++runCnt ))  # screen output count
 
   if [[ ${type} == "STDIN" ]]; then
-    eval ${shellToUse} ${TEST_SHELL} -1 ${params} >${QRY_OUTPUT_FILE} 2>/dev/null <<EOF
+    eval ${shellToUse} "${TEST_SHELL}" -1 ${params} >"${QRY_OUTPUT_FILE}" 2>/dev/null <<EOF
     ${qry}
 EOF
     actualRetCode=$?
-
   elif [[ ${type} == "PIPE" ]]; then
-    echo ${qry} | eval ${shellToUse} ${TEST_SHELL} ${params} >${QRY_OUTPUT_FILE} 
+    echo ${qry} | eval ${shellToUse} "${TEST_SHELL}" ${params} >"${QRY_OUTPUT_FILE}" 
     actualRetCode=$?
   elif [[ ${type} == "FILE" ]]; then # expecting -f <filename> parameter
-    ${shellToUse} ${TEST_SHELL} -1 ${params} >${QRY_OUTPUT_FILE} 
+    ${shellToUse} ${TEST_SHELL} -1 ${params} >"${QRY_OUTPUT_FILE}"
     actualRetCode=$?
-  else
-    # printf "Exiting. Invalid type specification: '${type}' Valid entries are STDIN, PIPE, FILE.\n"
-    # printf "Parameters:\n"
-    while (( "$#" )); do printf " '$1'\n"; shift; done 
-    exit 1
   fi 
 
   rm ${QRY_OUTPUT_FILE} # remove transient transient output file
@@ -313,27 +309,21 @@ testsToRun () {
   runCnt=0
   successCnt=0
   errorCnt=0
+  EXIT_ON_ERROR="Y"
    # first and only parameter must be a shell to run
   shellParam=${1:-zsh}
   setSaveFilePatterns --default # set save file patterns
 
   printf "Starting using ${shellParam}\n"
     # output file header
-  printf  "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tError Message\tShell\tDescription\n" > ${RESULTS_OUTPUT_FILE}
-
-  runShell --expectedRetCode ${RCODE_SUCCESS} --type "PIPE" --qry "${testSuccessQry}" \
-           --params "--saveAll ${MY_FILE_NAME} --saveDir SAVE"  \
-           --outPattern "${saveAllFilePattern}" \
-           --nbrFiles 2 --directory SAVE \
-           --desc "file tests - save with my defined file pattern."
-  exit
+  printf  "Result\tExit Code\tExp Code\tInput Type\tshell Exit Var\tshell Expected Exit Var\tCalling Params\tError Msg\tShell\tDescription\n" > ${RESULTS_OUTPUT_FILE}
 
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   printf "\n*** Initial db connect test ***\n" 
-  EXIT_ON_ERROR="Y"
+
   runShell --expectedRetCode ${RCODE_SUCCESS} --type "STDIN" --qry "${testSuccessQry}" \
            --desc "tesing connection - using NEO4J_[USERNAME PASSWORD] environment variables."
-  EXIT_ON_ERROR="N"
+  # EXIT_ON_ERROR="N"
 
   # INVALID PARAMETER TESTS -  none of these test should ever get to executing a query
   printf "\n*** Invalid paramater tests ***\n"  
@@ -497,13 +487,13 @@ testsToRun () {
            --grepPattern "${testParamGrep}" \
            --desc  "param test - multiple arguments."
 
-  runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "STDIN"  \
-           --params ""   \
+  runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "STDIN" --qry "" \
+           --params ""  \
            --desc "query tests - empty cypher query"
 
   runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "PIPE"  \
            --params ""  \
-           "query tests - empty cypher query"
+           --desc "query tests - empty cypher query"
 
   runShell --expectedRetCode ${RCODE_EMPTY_INPUT} --type "STDIN"  \
            --params "-t -c --quiet"   \
