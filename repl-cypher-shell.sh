@@ -17,26 +17,28 @@ usage() {
 
   ** cypher-shell main options **
 
-  [-u | --username]        cypher-shell username parameter.
-  [-p | --password]        cypher-shell password parameter.
-  [-P | --param]           Parameter stings strings. Run --help for how to use.
-  [-f | --file]            File containing query.
-  [--format]               cypher-shell --format option.
+  [-u | --username]  cypher-shell username parameter.
+  [-p | --password]  cypher-shell password parameter.
+  [-P | --param]     Parameter stings strings. Run --help for how to use.
+  [-f | --file]      File containing query.
+  [--format]         cypher-shell --format option.
   
-  ** Query output save options
+  ** Query output save options **
+
   [-A | --saveAll]     [allFilesPrefix]   Save cypher query and output results 
                                           files with optional user set prefix.
-  [-R | --saveResults] [resultFilePrefix] Save each query output in to a file. 
-                                          files with optional user set prefix.
-  [-S | --saveCypher]  [cypherFilePrefix] Save each query statement in a file.
-                                          files with optional user set prefix.
+  [-R | --saveResults] [resultFilePrefix] Save each query output in to a file 
+                                          with optional user set prefix.
+  [-S | --saveCypher]  [cypherFilePrefix] Save each query statement in a file
+                                          with optional user set prefix.
   [-D | --saveDir]     [dirPath]          Directory to save files to.  Default 
                                           is ${DEF_SAVE_DIR} if dirPath is not provided. 
 
   ** Editor options to use when running from command line **
-  [-E | --editor] [cmd]    Use external editor. Run --help for how to use.
-  [--nano]                 Use nano editor started with 'nano -t' flag.
-  [-V | --vi]              Use vi editor.
+
+  [-E | --editor] [cmd]  Use external editor. Run --help for how to use.
+  [--nano]               Use nano editor started with 'nano -t' flag.
+  [-V | --vi]            Use vi editor.
 
   ** Runtime options **
 
@@ -395,16 +397,18 @@ setDefaults () {
 
   [ -p /dev/fd/0 ] && is_pipe="Y" || is_pipe="N"   # pipe input?
 
-  edit_cnt=0          # count number of queries run, controls stdin messaging.
-  file_nbr=0          # output file number if query / results file(s) are saved
-  # db_name=""        # will only be populated on neo4j 4.x databases
-  save_dir="./"       # directory to use for any output files, including tmp files
-  find_dir="."        # directory to use for find
-  lastCypherFile=""   # last cypher file will not be blank if using editor and saving files
+  edit_cnt=0              # count number of queries run, controls stdin messaging.
+  file_nbr=0              # output file number if query / results file(s) are saved
+  # db_name=""            # will only be populated on neo4j 4.x databases
+  save_dir="./"           # directory to use for any output files, including tmp files
+  find_dir="."            # directory to use for find
+  DEF_SAVE_DIR="RCP_SAVE" # default save directory if none specified with --saveDir option
+  lastCypherFile=""       # last cypher file != "" if using editor and saving files, used to keep editing same file
+
   CS_FORMAT_OPT="--format verbose " # need extra space at end for param validation test
   LESS_DEF_OPT="--LONG-PROMPT --shift .005"
   VI_INITIAL_OPEN_OPTS=' +star '  # Start first exec for vi in append mode.
-  DEF_SAVE_DIR="RCP_SAVE"
+
 
    # variables used in file name creation
    # file patterns are in the form of:
