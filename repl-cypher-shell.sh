@@ -27,7 +27,7 @@ usage() {
 
   [-A | --saveAll]     [allFilesPrefix]   Save cypher query and output results 
                                           files with optional user set prefix.
-  [-R | --saveResults] [resultFilePrefix] Save each query output in to a file 
+  [-R | --saveResults] [resultFilePrefix] Save each results output in to a file 
                                           with optional user set prefix.
   [-S | --saveCypher]  [cypherFilePrefix] Save each query statement in a file
                                           with optional user set prefix.
@@ -814,7 +814,7 @@ getArgs() {
   fi
 
   if [[ ${show_cmd_line} == "Y" ]]; then # output command line args
-    cmd_arg_msg="Script started with: ${coll_args}"
+    cmd_arg_msg="Command line parameters: ${coll_args}"
   fi
 
   if [[ ${save_all} == "Y" ]]; then
@@ -1194,15 +1194,15 @@ runInternalCypher() {
   cypherRetCode=$?
   if [[ ${cypherRetCode} -ne 0 ]]; then
     messageOutput ""
-    messageOutput "=========="
+    messageOutput ""
     messageOutput "ERROR: cypher-shell generated error"
     messageOutput "Using this cypher-shell: ${use_this_cypher_shell}"
     messageOutput "cypher-shell return code: ${cypherRetCode}"
-    messageOutput "Script started with: ${coll_args}"
+    messageOutput "Started with: ${SHELL_NAME} ${coll_args}"
     messageOutput "Arguments passed to cypher-shell: ${cypherShellArgs}"
     messageOutput "cypher-shell output:"
     messageOutput "$(cat "${_out_file}")"
-    messageOutput "=========="
+    messageOutput ""
     messageOutput ""
 
     exitShell ${cypherRetCode}
