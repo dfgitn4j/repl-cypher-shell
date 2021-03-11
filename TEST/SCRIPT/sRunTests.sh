@@ -30,7 +30,6 @@ EOV
 # 
 # initVars - get return code variables and values from script / set script variables
 #
-
 initVars () {
   declare -a currentParams # array to hold parameters set for each run. reset in setEnvParams
   runCnt=0
@@ -87,24 +86,24 @@ initVars () {
 #   existingFileCnt "${QRY_OUTPUT_FILE}" # should be no files. error if there is
 #   if [[ ${fileCnt} -ne 0 ]]; then
 #     printf "%s\n\n" "Please clean up previous output files. Tests can fail when they shouldn't if left in place."
-#     find * -type f -depth 0 | grep --color=never -E "${saveAllFilePattern}"
+#     find * -type f -depth 0 | grep --color=never -E "${saveAllPostfix}"
 #     printf "%s\n\n" "Bye."
 #     exit
 #   fi
 # }
 exitShell () {
-
+  # 1st param is return code, 0 if none specified
   rm ${QRY_OUTPUT_FILE} 2>/dev/null
   rm ${CYPHER_SHELL_OUTPUT} 2>/dev/null # remove cypher-shell output log
 
-  existingFileCnt "${saveDir}"  "${saveAllFilePattern}" "" # should be no files. error if there is
+  existingFileCnt ""  "${saveAllPostfix}" # should be no files. error if there is
   if [[ ${fileCnt} -ne 0 ]]; then
     printf "Please clean up %d previous output files. Tests can fail when they shouldn't if left in place.\n\n" ${fileCnt} 
     find * -type f -depth 0 | grep  -E "${1}" 
     printf "%s\n\n" "Bye."
   fi
   [[ ! -s ${CYPHER_SHELL_ERR_LOG} ]] && rm ${CYPHER_SHELL_ERR_LOG}
-  exit ${1}
+  exit ${1:-0}
 }
 
 interruptShell () {
@@ -119,9 +118,15 @@ exitOnError () {
   # remove cypher-shell output log
   rm ${CYPHER_SHELL_OUTPUT} 2>/dev/null 
   if [[ ${EXIT_ON_ERROR} == "Y" ]]; then
-    printf "%s\n\n" "Encountered a testing error and EXIT_ON_ERROR = '${EXIT_ON_ERROR}'. Error output in file: ${CYPHER_SHELL_ERR_LOG}"
-    exit 1
+    printf "%s\n\n" "Encountered a testing error and EXIT_ON_ERROR = '${EXIT_ON_ERROR}'." "Error output in file: ${CYPHER_SHELL_ERR_LOG}"
+    exitShell 1
   fi 
+}
+
+exitInternalError () {
+  msg="${1:-Internal script logic error somewhare}"
+  printf '%s\n\n' "$msg"
+  exit 1
 }
 
 enterToContinue () {
@@ -133,10 +138,11 @@ enterToContinue () {
 
 existingFileCnt () {
   # params:
-  # 1st - directory
-  # 2nd - defining file pattern. can be default or user specified
-  # 3rd - file postfix pattern  
-  fileCnt=$(printf '%0d' $(find "${1}" -type f -depth 1 | grep --color=never -E "${2}" | grep --color=never -E "${3}" | wc -l ) )
+  #   1st is the save file prefix pattern 
+  #   2nd is the save file postfix pattern 
+  # Error if not enough params because this function can be part of delete file logic
+  [[ $# -ne 2 ]] && exitInternalError "Not enough parameters to function existingFileCnt. sent ${@}"
+  fileCnt=$(printf '%0d' $(find "${saveDir}" -type f -depth 1 | grep --color=never -E "${1}" | grep --color=never -E "${2}" | wc -l ) )
 }
 
 # output for screen and results file
@@ -188,7 +194,7 @@ setEnvParams () {
 
   # if not provided, provide defaults for parameters that need to be set 
   expectedNbrFiles="${expectedNbrFiles:-0}"
-  shellToUse="${shell:-zsh}"
+  shellToUse="${shellToUse:-zsh}"
   desc="${desc:-not provided}"  # description is optional
   type="${type:-STDIN}"
   expectedRetCode="${expectedRetCode:-${RCODE_SUCCESS}}"
@@ -200,7 +206,7 @@ setEnvParams () {
     saveDir="${DEF_SAVE_DIR}"
   fi # directory supplied
 
-  if [[ -n ${saveAll} ]]; then   # see what we're saving
+  if [[ -n ${saveAll} ]]; then   # see what we're saving - vars show explicit intent 
     saveCypher="Y" 
     saveResults="Y"
   else
@@ -209,12 +215,20 @@ setEnvParams () {
   fi
 
   # fill in defaults for non-supplied parameters
-  saveFilePrefix="${saveFilePrefix:-${OUTPUT_FILES_PREFIX}}"
-  saveQryFilePostfix="${saveQryFilePostfix:-${QRY_FILE_POSTFIX}}"
-  saveResultsFilePostfix="${saveResultsFilePostfix:-${RESULTS_FILE_POSTFIX}}"
-  saveResultsFilePattern="${saveResultsFilePattern:-}"
-  saveAllFilePattern="${saveQryFilePostfix}|${saveResultsFilePostfix}"
+  # used in grep to determine file existence 
+  # save file tests can set invidual save[Qry|Results]FilePrefix 
+  if [[ -n ${saveUserDefFilePrefix} ]]; then # user defined prefix, override query and results file prefix
+    saveQryFilePrefix="${saveUserDefFilePrefix}"
+    saveResultsFilePrefix="${saveUserDefFilePrefix}"
+  else # use set value or defaults
+    saveQryFilePrefix="${saveResultsFilePrefix:-${OUTPUT_FILES_PREFIX}}"
+    saveResultsFilePrefix="${saveResultsFilePrefix:-${OUTPUT_FILES_PREFIX}}"
+  fi 
 
+  # all qry and results files have fixed postfix
+  saveQryFilePostfix="${QRY_FILE_POSTFIX}}"  # no longer user defined
+  saveResultsFilePostfix="${RESULTS_FILE_POSTFIX}}" # no longer user defined
+  saveAllPostfix="${saveQryFilePostfix}|${saveResultsFilePostfix}" # used for cleanup file count
 }
 
 addToErrorFile () {
@@ -254,18 +268,24 @@ addToErrorFile () {
   # Parameters are a param / value pair, e.g. --expectedNbrFiles 0 will set expectedNbrFiles=0
   #
   # PARAMETERS
-  #   REQUIRED 
+  #   Typical parameters, with variable values or defaults set in function setEnvParams
   #     --expectedRetCode integer
   #     --type="FILE" | "STDIN" | "PIPE"
   #     --qry cypher query string
   #     --params parameter string for call to repl-cypher-shell.sh
   #     --outPattern output file(s) pattern string
-  #     --expectedNbrFiles integer for expected number of files
   #     --grepPattern file content grep pattern string
-  #  
-  #     OPTIONAL
-  #       --shell string representing shell to use, ksh or zsh
-  #       --desc description string for testing ouput 
+  #     --shell string representing shell to use, ksh or zsh
+  #     --desc description string for testing ouput 
+  #   
+  #   File saving / test parameters
+  #     --expectedNbrFiles       integer for expected number of files, default is 0
+  #     --saveFilePrefix         if not specified the default is ${OUTPUT_FILES_PREFIX}}"
+  #     --saveQryFilePostfix     Cannot be user defined - set to ${QRY_FILE_POSTFIX}}" / changing was removed
+  #     --saveResultsFilePostfix Cannot be user defined - set to ${RESULTS_FILE_POSTFIX}}" / changing was removed
+  #
+  #     --saveAll                Save results and query output
+
 runShell () {
 
   setEnvParams "${@}"
@@ -291,27 +311,27 @@ EOF
     actualRetCode=$?
   fi 
 
+  # if-then-else test pattern instead of collectively because errors can chain. 
   updateSuccessCnt="N"
   if [[ ${actualRetCode} -ne ${expectedRetCode} ]]; then
     printf -v secondErrorMsg "Expected exit code = %d, got %d"  ${expectedRetCode} ${actualRetCode}
   elif [[ ${expectedNbrFiles} -eq 0 ]]; then # no output files expected.
-    existingFileCnt "${saveDir}" "${saveFilePrefix}" "${saveAllFilePattern}"
+    existingFileCnt  "${saveFilePrefix}" "${saveAllPostfix}"
     if [[ ${fileCnt} -ne 0 ]]; then
       secondErrorMsg="Output files from shell exist that should not be there."
     else
       updateSuccessCnt="Y"
     fi
-  elif [[ ! -z ${grepPattern} ]] && \
-         [[ $(eval "${grepPattern} ${QRY_OUTPUT_FILE}") -eq 0 ]]; then # output of grep cmd should be > 0
+  elif [[ ! -z ${grepPattern} ]] && [[ $(eval "${grepPattern} ${QRY_OUTPUT_FILE}") -eq 0 ]]; then # output of grep cmd should be > 0
       printf -v secondErrorMsg "%s" "grep command '${grepPattern}' on output file: ${QRY_OUTPUT_FILE} failed."
-  else # expectedNbrFiles -ne 0 
+  else
     if [[ ${saveCypher} == "Y" ]]; then # file existence and file content existence tests
-      existingFileCnt "${saveDir}" "${saveFilePrefix}" "${saveQryFilePostfix}"
+      existingFileCnt "${saveFilePrefix}" "${saveQryFilePostfix}"
       saveFileCnt=$(( saveFileCnt+fileCnt ))
     fi
 
     if [[ ${saveResults} == "Y" ]]; then # file existence and file content existence tests
-      existingFileCnt "${saveDir}" "${saveFilePrefix}" "${saveResultsFilePattern}"
+      existingFileCnt "${saveFilePrefix}" "${saveUserDefFilePrefix}"
       saveFileCnt=$(( saveFileCnt+fileCnt ))
     fi
     if [[ ${saveFileCnt} -ne ${expectedNbrFiles} ]]; then
@@ -326,7 +346,6 @@ EOF
       printf -v secondErrorMsg "File ${externalFile} should exist but was deleted"
       updateSuccessCnt="N"
     else
-      rm ${externalFile}
       updateSuccessCnt="Y"
     fi
   fi
@@ -334,14 +353,14 @@ EOF
   # cleanup and return
   rm ${QRY_OUTPUT_FILE} # remove transient transient output file
   if [[ "${updateSuccessCnt}" == "Y" ]]; then  # clean up qry and results files regardless
-    for rmFile in $(find * -type f -depth 0 | grep --color=never -E "${saveAllFilePattern}" ) ; do
+    for rmFile in $(find "${saveDir}" -type f -depth 1 | grep --color=never -E "${saveAllPostfix}" ) ; do
       rm ${rmFile}
     done 
     msg="${successMsg}"
     (( ++successCnt ))
     printOutput
-  else
-    msg="${errorMsg}"
+  else # error
+    msg="${errorMsg}" # for screen and runtime log output
     (( ++errorCnt ))
     addToErrorFile  # only log failed cypher-shell calls
     printOutput
@@ -353,7 +372,7 @@ EOF
 
 # someday write expect scripts for interactive input
 testsToRun () {
-
+  sep="-" # used as seperator after $testType in --desc flag for excel parsing
   printf "Starting using ${shellParam}\n"
   # output file header
   printf  "      \tExit\tExp \tInput\n" > ${RESULTS_OUTPUT_FILE}
@@ -362,8 +381,9 @@ testsToRun () {
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   printf "\n*** Initial db connect test ***\n" 
 
+  testType="connection testing ${sep}"
   runShell --expectedRetCode=${RCODE_SUCCESS} --type="STDIN" --qry="${testSuccessQry}" \
-           --desc="tesing connection - using NEO4J_[USERNAME PASSWORD] environment variables."
+           --desc="${testType} using NEO4J_[USERNAME PASSWORD] environment variables."
 exit
   # EXIT_ON_ERROR="N"
 
@@ -400,7 +420,7 @@ exit
 
   touch ${TMP_TEST_FILE}
   runShell --expectedRetCode=${RCODE_INVALID_CMD_LINE_OPTS} --type="PIPE"  \
-           --params="--file=${TMP_TEST_FILE}"  --outPattern="${QRY_OUTPUT_FILE}" \
+           --params="--file=${TMP_TEST_FILE}"  \
            --expectedNbrFiles=0 --externalFile="${TMP_TEST_FILE}" \
            --desc="invalid param test - incompatible file input and pipe input."
 
@@ -561,58 +581,54 @@ exit
            --desc="query / file tests - executing $ at beginning of text before cypher"
 
   # SAVE FILE TESTS
+  #  --expectedNbrFiles
+  #  --saveFilePrefix        
   printf "\n*** Save file test ***\n" 
 
   runShell --expectedRetCode=${RCODE_SUCCESS} --type="STDIN" --qry="${testSuccessQry}"  \
            --params="--saveAll"  \
-           --outPattern="${saveAllFilePattern}" \
            --expectedNbrFiles=2  \
-           --desc="file tests - save cypher query and text results files."
+           --desc="file tests - save cypher query and text results default pre- and postfix."
 
   runShell --expectedRetCode=${RCODE_SUCCESS} --type="STDIN" --qry="${testSuccessQry}"  \
-           --params="--saveCypher"    \
-           --outPattern="${saveQryFilePostfix}" \
+           --params="--saveCypher"  \
            --expectedNbrFiles=1  \
-           --desc="file tests - save cypher query file."
+           --desc="file tests - save cypher query only file default postfix."
 
   runShell --expectedRetCode=${RCODE_SUCCESS} --type="STDIN" --qry="${testSuccessQry}"  \
            --params="--saveResults"  \
-           --outPattern="${saveResultsFilePattern}" \
            --expectedNbrFiles=1  \
-           --desc="file tests - save results file."
+           --desc="file tests - save results file only default postfix."
 
   runShell --expectedRetCode=${RCODE_SUCCESS} --type="PIPE" --qry="${testSuccessQry}"  \
            --params="--saveResults"  \
-           --outPattern="${saveResultsFilePattern}" \
            --expectedNbrFiles=1  \
-           --desc="file tests - save results file."
+           --desc="file tests - save results file only default postfix."
 
   runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --type="STDIN" --qry="${testFailQry}"  \
            --params="--saveResults"  \
-           --outPattern="${saveResultsFilePattern}" \
+           --expectedNbrFiles=0 \
            --desc="file tests - bad query input save results file that will not exist."
 
+   # query failed run w/ no files saved
+  testType="file failed query test ${sep}"
   runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --type="PIPE" --qry="${testFailQry}"  \
-           --params="--saveResults"  \
-           --outPattern="${saveResultsFilePattern}" \
-           --desc="file tests - bad query input save results file that will not exist."
+           --params="--saveAll"  \
+           --expectedNbrFiles=0 \
+           --desc="${testType} bad query input save query and results files should not exist."
 
-  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --type="STDIN"   \
+  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --type="STDIN" --qry='' \
            --params="--saveResults"  \
-           --outPattern="${saveResultsFilePattern}" \
-           --desc="file tests - empty input query input save results file that will not exist."
+           --desc="${testType} empty input query input save results file that will not exist."
 
-  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --type="PIPE"   \
-           --params="--saveResults"   \
-           --outPattern="${saveResultsFilePattern}" \
-           --desc="file tests - empty input query input save results file that will not exist."
+  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --type="PIPE" --qry=''  \
+           --params="--saveResults" \
+           --desc="${testType} empty input query input save results file that will not exist."
 
   # begin testing own output file names
   printf "\n*** Defined ouput file names ***\n"
-  setSaveFilePatterns --new="${MY_FILE_NAME}"
   runShell --expectedRetCode=${RCODE_SUCCESS} --type="STDIN" --qry="${testSuccessQry}" \
            --params="--saveAll=${MY_FILE_NAME}"  \
-           --outPattern="${saveAllFilePattern}" \
            --expectedNbrFiles=2 \
            --desc="file tests - save with my defined file pattern."
 
@@ -624,7 +640,7 @@ exit
 
   runShell --expectedRetCode=${RCODE_SUCCESS} --type="STDIN" --qry="${testSuccessQry}" \
            --params="--saveResults=${MY_FILE_NAME}"  \
-           --outPattern="${saveResultsFilePattern}" \
+           --outPattern="${saveUserDefFilePrefix}" \
            --expectedNbrFiles=1 \
            --desc="file tests - save with my defined file pattern."
 
@@ -642,7 +658,7 @@ exit
 
   runShell --expectedRetCode=${RCODE_SUCCESS} --type="PIPE" --qry="${testSuccessQry}" \
            --params="--saveResults=${MY_FILE_NAME}"  \
-           --outPattern="${saveResultsFilePattern}" \
+           --outPattern="${saveUserDefFilePrefix}" \
            --expectedNbrFiles=1 \
            --desc="file tests - save with my defined file pattern."
   
@@ -654,8 +670,7 @@ exit
 #
 setopt SH_WORD_SPLIT >/dev/null 2>&1
 
-
-# trap interruptShell SIGINT
+trap interruptShell SIGINT
 
 initVars
 extractTestingVars  # get required variables from $TEST_SHELL being tested
