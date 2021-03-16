@@ -9,31 +9,28 @@
 # 
 
 help() {
-        cat << USAGE
-
-        Valid command line options:
-
-          --uid=<string>       Neo4j user login. Default is ${DEF_UID}.  
-          --pw=<string>        Neo4j user password. Default is ${DEF_PW}.    
-                   
-          --exitOnError        Stop testing on error. Default is to keep running.
-          --startTestNbr=<nbr> Begin at test number 'nbr'. Default is 1.
-          --endTestNbr=<nbr>   End at test number 'nbr'. Default is 1000.
+ cat << USAGE
+ Valid command line options:
+   --uid=<string>       Neo4j user login. Default is ${DEF_UID}.  
+   --pw=<string>        Neo4j user password. Default is ${DEF_PW}.    
             
-          --returnToCont       Press <RETURN> to continue after each test.
-          --dryRun             Print what tests would be run.  --printVars           
-          --printVars          Print variables used as set in ${TEST_SHELL}. 
-                               NOTE: The TEST_SHELL varible is set in the code. 
+   --exitOnError        Stop testing on error. Default is to keep running.
+   --startTestNbr=<nbr> Begin at test number 'nbr'. Default is 1.
+   --endTestNbr=<nbr>   End at test number 'nbr'. Default is 1000.
+     
+   --returnToCont       Press <RETURN> to continue after each test.
+   --dryRun             Print what tests would be run.  --printVars           
+   --printVars          Print variables used as set in ${TEST_SHELL}. 
+                        NOTE: The TEST_SHELL varible is set in the code. 
+   --help               This message.
 
-          --help               This message.
-
-          NOTE: The variables uid, pw, exitOnError and returnToCont can all be 
-          changed before each test is run.
+   NOTE: The variables uid, pw, exitOnError and returnToCont can all be 
+   changed before each test is run.
 USAGE
 }
 
 getCmdLineArgs () {
-  validOpts="exitOnError startTestNbr endTestNbr dryRun printVars help "  # need space at end
+  validOpts="exitOnError startTestNbr endTestNbr uid pw returnToCont dryRun printVars help "  # need space at end
   local errorMsg=""
   while [ $# -gt 0 ]; do
     if [[ ${1} == *"--"* ]]; then
@@ -48,8 +45,11 @@ getCmdLineArgs () {
       fi
 
       echo "${validOpts}" | grep --quiet "$paramName "
-      if [[ $? -ne 0 ]]; then
+      if [[ $? -ne 0 ]]; then  # ck for invalid parameter name
         errorMsg="ERROR: Bad command line argument '${paramName}'. Valid values are ${validOpts}, passed in: ${@}"
+      elif [[ ${paramName} == "printVars" ]]; then # print extracted vars and exit if --printVars cmd line option
+        printExtractedVars  
+        exitShell 0 # printing extracted vars, no need to continue on
       elif [[ ${paramName} == "help" ]]; then
         errorMsg="help"
       elif [[ -n ${startTestNbr} ]] && [[ ${startTestNbr} == 'Y' ||  ${startTestNbr} -lt 1 ]]; then
@@ -74,11 +74,35 @@ getCmdLineArgs () {
     printf "ERROR for options: --startTestNbr=${startTestNbr} cannot be greater than --endTestNbr=${endTestNbr}"
     exit 1
   fi
-   
+  
   # set defaults for flag parameters
   exitOnError="${exitOnError:-N}"    # default is not to stop on error
-  dryRun="${dryRun:-N}"
-  printVars="${printVars:-N}"
+  dryRun="${dryRun:-N}"              # show what would be run with step #
+ 
+  exitOnError="${exitOnError:-N}"          # exit if runShell fails, "N" to continue
+  returnToCont="${returnToCont:-N}"        # press enter to continue to next test
+
+  uid="${uid:-${DEF_UID}}"
+  pw="${pw:-${DEF_PW}}"
+  if [[ -n ${uid} ]]; then  # did not override user id
+    if [[ -n ${NEO4J_USERNAME} ]]; then # NEO4J_USERNAME env var does not exist
+      uid=${DEF_UID}
+      export NEO4J_USERNAME="${uid}"
+      printf "Setting environment variable NEO4J_USERNAME=${uid}"
+    else
+      printf "Using NEO4J_USERNAME=${NEO4J_USERNAME}"
+    fi
+  fi
+
+  if [[ -n ${pw} ]]; then  # did not override user id
+    if [[ -n ${NEO4J_PASSWORD} ]]; then # NEO4J_USERNAME env var does not exist
+      pw=${DEF_PW}
+      export NEO4J_PASSWORD="${pw}"
+      printf "Setting environment variable NEO4J_PASSWORD=${pw}"
+    else
+      printf "Using NEO4J_PASSWORD=${NEO4J_PASSWORD}"
+    fi
+  fi
 }
 
 extractTestingVars() {
@@ -99,21 +123,15 @@ EOV
   eval "$(grep --color=never DEF_SAVE_DIR= ${TEST_SHELL} | head -1)"
 }
 
-# 
-# initVars - get return code variables and values from script / set script variables
-#
 initVars () {
-
+  extractTestingVars  # get required variables from $TEST_SHELL being tested
   # testing shell and default uid / pw. 
-  TEST_SHELL='../../repl-cypher-shell.sh'  # shell to test!
-  DEF_UID="neo4j"
-  DEF_PW="admin"
   declare -a currentParams # array to hold parameters set for each run. reset in setEnvParams
   # Constants / defaults
   successMsg="PASS"  # output msgs
   errorMsg="FAIL"
 
-   # file patterns for file existence test
+  # file patterns for file existence test
   TMP_TEST_FILE=aFile_${RANDOM}${QRY_FILE_POSTFIX}
   QRY_OUTPUT_FILE="qryResults_${RANDOM}.tmpQryOutputFile"
   # RESULTS_OUTPUT_FILE="resultsTestRun-$(date '+%Y-%m-%d_%H:%M:%S')".txt
@@ -140,6 +158,20 @@ initVars () {
   testTimeParamGrep="grep -c --color=never '${TIME_OUTPUT_HEADER}'"
 }
 
+printExtractedVars () {
+  printf "\nFrom ${TEST_SHELL}:\n"
+  printf "\n======== Error Code Vars =======\n\n"
+  printf "%s\n" ${vars}
+  printf "\n=================================\n"
+  printf "\n==== Directory / File Vars ======\n\n"
+  printf "%s\n" "OUTPUT_FILES_PREFIX=${OUTPUT_FILES_PREFIX}" 
+  printf "%s\n" "QRY_FILE_POSTFIX=${QRY_FILE_POSTFIX}"
+  printf "%s\n" "RESULTS_FILE_POSTFIX=${RESULTS_FILE_POSTFIX}"
+  printf "%s\n" "DEF_SAVE_DIR=${DEF_SAVE_DIR}" 
+  printf "\n=================================\n"
+  exit 0
+}
+
 exitShell () {
   # 1st param is return code, 0 if none specified
   rm ${QRY_OUTPUT_FILE} 2>/dev/null
@@ -157,9 +189,6 @@ exitShell () {
 
 interruptShell () {
   printf "\nCtl-C pressed. Bye.\n\n"
-  exec <&- # close stdin
-  printf "Last ${TEST_SHELL} output message:\n\n"
-  cat ${QRY_OUTPUT_FILE}
   exitShell 1
 }
 
@@ -178,7 +207,7 @@ exitInternalError () {
 }
 
 enterToContinue () {
-  if [[ ${ENTER_TO_CONTINUE} == "Y" ]]; then
+  if [[ ${returnToCont} == "Y" ]]; then
     printf 'Enter to continue.'
     read n
   fi
@@ -193,21 +222,7 @@ existingFileCnt () {
   fileCnt=$(printf '%0d' $(find "${saveDir}" -type f -depth 1 | grep --color=never -E "${1}" | grep --color=never -E "${2}" | wc -l ) )
 }
 
-printExtractedVars () {
-  if [[ ${printVars} == "Y" ]]; then # can't print extracted vars until here
-    printf "\nFrom ${TEST_SHELL}:\n"
-    printf "\n==== Error Code Vars =====\n\n"
-    printf "%s\n" ${vars}
-    printf "\n==========\n"
-    printf "\n==== Directory Vars =====\n\n"
-    printf "%s\n" "OUTPUT_FILES_PREFIX=${OUTPUT_FILES_PREFIX}" 
-    printf "%s\n" "QRY_FILE_POSTFIX=${QRY_FILE_POSTFIX}"
-    printf "%s\n" "RESULTS_FILE_POSTFIX=${RESULTS_FILE_POSTFIX}"
-    printf "%s\n" "DEF_SAVE_DIR=${DEF_SAVE_DIR}" 
-    printf "\n==========\n"
-    exit 0
- fi  
-}
+
 
 # output for screen and results file
 printOutput () {
@@ -257,7 +272,6 @@ printOutput () {
  #
 setEnvParams () {
   # unsest previous environment vars
-#set -xv
   for envVar in "${currentParams[@]}"; do unset "${envVar}"; done
   currentParams=() # blank set parameter array
 
@@ -280,15 +294,7 @@ setEnvParams () {
   # if not provided, provide defaults for parameters that need to be set 
     # set Neo4j uid / pw to a value if env vars not set. Easier testing if
     # done with environment variables. 
-  uid="${uid:-${DEF_UID}}"
-  pw="${pw:-${DEF_PW}}"
-  NEO4J_USERNAME="${uid}"
-  export NEO4J_USERNAME
-  NEO4J_PASSWORD="${pw}"
-  export NEO4J_PASSWORD
-  
-  exitOnError="${exitOnError:-N}"          # exit if runShell fails, "N" to continue
-  returnToCont="${returnToCont:-N}"        # press enter to continue to next test
+
   expectedNbrFiles=${expectedNbrFiles:-0}  # expected number of output files
   shellToUse="${shellToUse:-zsh}"          # shell to use
   inputType="${inputType:-STDIN}"          # input types are STDIN, PIPE and FILE
@@ -501,6 +507,10 @@ testsToRun () {
     runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN"  \
              --params="-Nogood" \
              --desc="bad passthru argument to cypher-shell."
+
+    runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN"  \
+             --params="--invalid param"   \
+             --desc="invalid parameter argument value."
   
     runShell --expectedRetCode=${RCODE_INVALID_CMD_LINE_OPTS} --inputType="STDIN"  \
              --params="--file" \
@@ -514,16 +524,14 @@ testsToRun () {
              --params="--vi --editor 'atom'"  \
              --desc="conflicting editor args."
   
+    runShell --expectedRetCode=${RCODE_CYPHER_SHELL_NOT_FOUND} --inputType="STDIN"  \
+             --params="--cypher-shell /a/bad/directory/xxx"  \
+             --desc="explicit bad cypher-shell executable with --cypher-shell."
+
     runShell --expectedRetCode=${RCODE_INVALID_CMD_LINE_OPTS} --inputType="PIPE"  \
              --params="--vi"   \
              --desc="incompatible editor argument and pipe input"
-  
-    touch ${TMP_TEST_FILE}
-    runShell --expectedRetCode=${RCODE_INVALID_CMD_LINE_OPTS} --inputType="PIPE"  \
-             --params="--file=${TMP_TEST_FILE}"  \
-             --expectedNbrFiles=0 --externalFile="${TMP_TEST_FILE}" \
-             --desc="incompatible file input and pipe input."
-    
+
     runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="PIPE"  \
              --params="-Nogood"   \
              --desc="bad pass thru argument to cypher-shell."
@@ -539,10 +547,6 @@ testsToRun () {
     runShell --expectedRetCode=${RCODE_INVALID_CMD_LINE_OPTS} --inputType="PIPE"  \
              --params="--vi --editor 'atom'"   \
              --desc="conflicting editor args."
-    
-    runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN"  \
-             --params="--invalid param"   \
-             --desc="invalid parameter argument value."
   
     runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="PIPE"  \
              --params="--invalid param"   \
@@ -555,15 +559,72 @@ testsToRun () {
     runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="PIPE"  \
              --params="--address n0h0st"  \
              --desc="bad pass-thru argument to cypher-shell."
-  
-    runShell --expectedRetCode=${RCODE_CYPHER_SHELL_NOT_FOUND} --inputType="STDIN"  \
-             --params="--cypher-shell /a/bad/directory/xxx"  \
-             --desc="explicitly set cypher-shell executable with --cypher-shell."
 
+    touch ${TMP_TEST_FILE}
+    runShell --expectedRetCode=${RCODE_INVALID_CMD_LINE_OPTS} --inputType="PIPE"  \
+             --params="--file=${TMP_TEST_FILE}"  \
+             --expectedNbrFiles=0 --externalFile="${TMP_TEST_FILE}" \
+             --desc="incompatible file input and pipe input."
+    rm ${TMP_TEST_FILE}
+
+    # VALID PARAM TESTS
+    testGroup="Valid parameter tests"
+    CYPHER_SHELL="$(which cypher-shell)" # change  if want to use a different cypher-shell  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+             --params="--cypher-shell ${CYPHER_SHELL}"   \
+             --desc="explicitly set cypher-shell executable with --cypher-shell."
+  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN"  \
+             --params="--version"   \
+             --desc="cypher-shell one-and-done version arg."
+  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="PIPE"  \
+             --params="--version"   \
+             --desc="param test - cypher-shell one-and-done version arg."
+  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="PIPE" --qry="${testSuccessQry}" \
+             --params="--address localhost"  \
+             --desc="good thru argument to cypher-shell."
+  
+    testGroup="uid / pwd tests"
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+             --params="-u ${uid} -p ${pw}"  \
+             --desc="uid/pw tests - using -u and and -p arguments"
+  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+             --params="-u ${uid}"   \
+             --desc="uid/pw tests - using -u and NEO4J_PASSWORD environment variable."
+  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+             --params="-p ${pw}"   \
+             --desc="uid/pw tests - using -p and NEO4J_USERNAME environment variable."
+  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+             --params="-p ${pw}"   \
+             --desc="uid/pw tests - using -p and NEO4J_USERNAME environment variable."
+  
+    runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN" --qry="${testSuccessQry}" \
+             --params="-p ${pw}xxx"  \
+             --desc="uid/pw tests - using -u bad password"
+  
+    runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN" --qry="${testSuccessQry}" \
+             --params="-u ${uid}xxx"  \
+             --desc="uid/pw tests - using -u bad username"
+    
+    unset NEO4J_USERNAME
+    runShell --expectedRetCode=${RCODE_NO_USER_NAME} --inputType="PIPE" --qry="${testSuccessQry}" \
+             --params=""   \
+             --desc="uid/pw tests - pipe input with no env or -u usename defined"
+    export NEO4J_USERNAME=${uid}
+  
+    unset NEO4J_PASSWORD
+    runShell --expectedRetCode=${RCODE_NO_PASSWORD} --inputType="PIPE" --qry="${testSuccessQry}" \
+             --params=""   \
+             --desc="uid/pw tests - pipe input with no env or -p password defined"
+    export NEO4J_PASSWORD=${pw}
+ 
     break # made it to end, exit loop
   done
-
-
 }
 
 
@@ -574,11 +635,14 @@ setopt SH_WORD_SPLIT >/dev/null 2>&1
 
 trap interruptShell SIGINT
 
-getCmdLineArgs "${@}"
-initVars
-extractTestingVars  # get required variables from $TEST_SHELL being tested
 
-printExtractedVars  # print extracted vars and exit if --printVars cmd line option
+# SET THESE VARIABLES
+TEST_SHELL='../../repl-cypher-shell.sh'  # shell to test! Needs to be set
+DEF_UID="neo4j"  # use if env var NEO4J_USERNAME is not set
+DEF_PW="admin"   # use if env var NEO4J_PASSWORD is not set
+
+initVars
+getCmdLineArgs "${@}"
 
 # ckForLeftoverOutputFiles 
 # for shellToUse in 'zsh' 'bash'; do
