@@ -521,7 +521,7 @@ getArgs() {
   cypher_shell_info_arg=""   # any info flags passed: -v | --version | --driver-version
   coll_args=""               # all argumnents passed to script
   use_params=""              # query parameter arguments
-  input_cypher_file_name=""  # input file
+  # input_cypher_file_name=""  # input file
   use_this_cypher_shell=""   # cypher-shell to use. mostly for desktop
   editor_to_use=""           # launch editor command line
 
@@ -844,7 +844,7 @@ messageOutput() {  # to print or not to print
   # $1 is message $2 is optional format string for printf
   local _quote_string=${2:-"Y"}
   local _fmt_str=${3:-"%s\n"}
-  if [[ ${quiet_output} == "N" && ${is_pipe} == "N"  ]]; then
+  if [[ ${quiet_output} == "N" ]]; then
     if [[ ${_quote_string} == "Y" ]]; then
       printf "${_fmt_str}" "${1}"  # quotes means print on one line (default)
     else

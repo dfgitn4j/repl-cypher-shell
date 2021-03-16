@@ -10,27 +10,38 @@
 
 help() {
  cat << USAGE
+
  Valid command line options:
    --uid=<string>       Neo4j user login. Default is ${DEF_UID}.  
    --pw=<string>        Neo4j user password. Default is ${DEF_PW}.    
-            
-   --exitOnError        Stop testing on error. Default is to keep running.
-   --startTestNbr=<nbr> Begin at test number 'nbr'. Default is 1.
-   --endTestNbr=<nbr>   End at test number 'nbr'. Default is 1000.
-     
-   --returnToCont       Press <RETURN> to continue after each test.
-   --dryRun             Print what tests would be run.  --printVars           
-   --printVars          Print variables used as set in ${TEST_SHELL}. 
+   
+   --testErrorExit      Stop testing on error. Default is to keep running.
+                        Stays enabled unless reset.     
+   --returnToCont       Press <RETURN> to continue after each test. Stays 
+                        enabled unless reset.           
+   
+   --dryRun             Print what tests would be run. 
+   --startTestNbr=<nbr> Begin at test number 'nbr'. Default is ${DEF_START_TEST_NBR}.
+   --endTestNbr=<nbr>   End at test number 'nbr'. Default is ${DEF_END_TEST_NBR}.
+        
+   --printVars          Print variables used as set in TEST_SHELL=${TEST_SHELL}. 
                         NOTE: The TEST_SHELL varible is set in the code. 
+
    --help               This message.
 
-   NOTE: The variables uid, pw, exitOnError and returnToCont can all be 
-   changed before each test is run.
+   NOTE: 
+     The variables uid, pw, testErrorExit and returnToCont can all be 
+     changed before each test is run.
+
+     testErrorExit and returnToCont variable values are 'Y' to enable, anything 
+     else to disable. Using command line flags sets the variable to 'Y', must 
+     be disabled explicitly in code. 
+
 USAGE
 }
 
 getCmdLineArgs () {
-  validOpts="exitOnError startTestNbr endTestNbr uid pw returnToCont dryRun printVars help "  # need space at end
+  validOpts="testErrorExit startTestNbr endTestNbr uid pw returnToCont dryRun printVars help "  # need space at end
   local errorMsg=""
   while [ $# -gt 0 ]; do
     if [[ ${1} == *"--"* ]]; then
@@ -70,17 +81,19 @@ getCmdLineArgs () {
     shift
   done
 
+  # test number to start and end at
+  startTestNbr=${startTestNbr:-${DEF_START_TEST_NBR}}    
+  endTestNbr=${endTestNbr:-${DEF_END_TEST_NBR}}          
   if [[ ${startTestNbr} -gt ${endTestNbr} ]]; then
-    printf "ERROR for options: --startTestNbr=${startTestNbr} cannot be greater than --endTestNbr=${endTestNbr}"
+    printf "ERROR for options: --startTestNbr=${startTestNbr} cannot be greater than --endTestNbr=${endTestNbr}\n"
     exit 1
   fi
   
   # set defaults for flag parameters
-  exitOnError="${exitOnError:-N}"    # default is not to stop on error
+  testErrorExit="${testErrorExit:-N}"    # default is not to stop on error
   dryRun="${dryRun:-N}"              # show what would be run with step #
- 
-  exitOnError="${exitOnError:-N}"          # exit if runShell fails, "N" to continue
-  returnToCont="${returnToCont:-N}"        # press enter to continue to next test
+  returnToCont="${returnToCont:-N}"  # press enter to continue to next test
+
 
   uid="${uid:-${DEF_UID}}"
   pw="${pw:-${DEF_PW}}"
@@ -192,9 +205,9 @@ interruptShell () {
   exitShell 1
 }
 
-exitOnError () {
-  if [[ ${exitOnError} == "Y" ]]; then
-    printf "%s\n" "Encountered a testing error and exitOnError = '${exitOnError}'." 
+testErrorExit () {
+  if [[ ${testErrorExit} == "Y" ]]; then
+    printf "%s\n" "Encountered a testing error and testErrorExit = '${testErrorExit}'." 
     [[ -f ${TEST_SHELL_ERR_LOG} ]] && printf "%s\n" "Error output in file: ${TEST_SHELL_ERR_LOG}"
     exitShell 1
   fi 
@@ -244,8 +257,10 @@ printOutput () {
       printf  "Test\tTest  \tExit\tExp \tInput\t              \tExpected\n" > ${RESULTS_OUTPUT_FILE}
       printf  "Nbr \tResult\tCode\tCode\tType \tShell Exit Var\tShell Exit Var\tCalling Params\tTesting Group\tError Msg\tShell\tDescription\n" >> ${RESULTS_OUTPUT_FILE}
     fi
-    printf "%s  Exit Code: %d  Exp Code: %d Input: %-6s Shell: %-4s Error: %0s Desc: %s\n" \
-           "${outputMsg}" "${actualRetCode}" "${expectedRetCode}" "${inputType}" "${shellToUse}" "${secondErrorMsg}" "${desc}"
+
+    printf "%s  Exit Code: %d  Exp Code: %d Input: %-6s Shell: %-4s Desc: %s" \
+           "${outputMsg}" "${actualRetCode}" "${expectedRetCode}" "${inputType}" "${shellToUse}"  "${desc}"
+    [[ -n ${secondErrorMsg} ]] && printf "%s\n" " **ERROR: ${secondErrorMsg}" || printf "\n"
     printf "%02d\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
            ${runCnt} ${outputMsg} ${actualRetCode} ${expectedRetCode} ${inputType} \
            ${errVarNames[@]:${actualRetCode}:1} ${errVarNames[@]:${expectedRetCode}:1}  \
@@ -272,7 +287,10 @@ printOutput () {
  #
 setEnvParams () {
   # unsest previous environment vars
-  for envVar in "${currentParams[@]}"; do unset "${envVar}"; done
+  # testGrp, testErrorExit and returnToCont stay set until expliclty changed
+  for envVar in "${currentParams[@]}"; do 
+    [[ ${envVar} != "testErrorExit" && ${envVar} != "returnToCont" && ${envVar} != "testGroup" ]] && unset "${envVar}"
+  done
   currentParams=() # blank set parameter array
 
   while [ $# -gt 0 ]; do
@@ -300,6 +318,7 @@ setEnvParams () {
   inputType="${inputType:-STDIN}"          # input types are STDIN, PIPE and FILE
 
   expectedRetCode="${expectedRetCode:-${RCODE_SUCCESS}}" # pulled from shell being tested
+  qry="${qry:-${testSuccessQry}}" # use succesful query if no query specified
 
   desc="${desc:-not provided}"             # description is optional
   testGroup="${testGroup:-not provided}"   # testing group description
@@ -337,7 +356,8 @@ setEnvParams () {
 }
 
 addToErrorFile () {
-  # remove ctl characters from cypher output file
+  # remove ctl characters from cypher output 
+  [[ -s ${TEST_SHELL_OUTPUT} ]] && return  # nothing to print
   printf -v errStr '==================== ERROR on run number: %02d ====================' ${runCnt}
   printf '%s\n\n' "${errStr}" >> ${TEST_SHELL_ERR_LOG}
 
@@ -403,7 +423,10 @@ runShell () {
   (( runCnt++ ))
 
   if [[ -n ${startTestNbr} || -n ${endTestNbr} ]] && [[ ${runCnt} -lt ${startTestNbr} || ${runCnt} -gt ${endTestNbr} ]]; then
-    break
+    [[ -n ${startTestNbr} && ${runCnt} -eq 1 ]] && printf "%s" "Starting test at run number: ${startTestNbr}"
+    [[ -n ${endTestNbr} && ${runCnt} -eq 1 ]] && printf "%s" " and ending test at run number: ${endTestNbr}"
+    [[ ${runCnt} -eq 1 ]] && printf "\n"
+    return
   elif [[ ${dryRun} == 'Y' ]]; then
     printOutput
   else # run test
@@ -411,12 +434,13 @@ runShell () {
     printf "%02d. " ${runCnt}  # screen output count
   
     if [[ ${inputType} == "STDIN" ]]; then
-      eval ${shellToUse} "${TEST_SHELL}" -1 ${params} >"${QRY_OUTPUT_FILE}" 2>&1 >${TEST_SHELL_OUTPUT} <<EOF
-      ${qry}
+      # need the -1 "run once" flag to avoid input loop. makes life much easier
+      ${shellToUse} "${TEST_SHELL}" -1 ${params} >"${QRY_OUTPUT_FILE}" 2>&1 >${TEST_SHELL_OUTPUT} <<EOF
+      ${qry} 
 EOF
       actualRetCode=$?
     elif [[ ${inputType} == "PIPE" ]]; then
-      echo ${qry} | eval ${shellToUse} "${TEST_SHELL}" ${params} >"${QRY_OUTPUT_FILE}" 2>&1 >${TEST_SHELL_OUTPUT}
+      echo ${qry} |  ${shellToUse} "${TEST_SHELL}"  ${params} >"${QRY_OUTPUT_FILE}" 2>&1 >${TEST_SHELL_OUTPUT}
       actualRetCode=$?
     elif [[ ${inputType} == "FILE" ]]; then # expecting -f <filename> parameter
       ${shellToUse} ${TEST_SHELL} -1 ${params} >"${QRY_OUTPUT_FILE}" 2>&1 >>${TEST_SHELL_OUTPUT}
@@ -451,14 +475,13 @@ EOF
       else
         updateSuccessCnt="Y"
       fi
-    fi
-  
-    if [[ -n ${externalFile} ]]; then
-      if [[ ! -f ${externalFile} ]]; then # external file should be around
-        printf -v secondErrorMsg "File ${externalFile} should exist but was deleted"
-        updateSuccessCnt="N"
-      else
-        updateSuccessCnt="Y"
+      if [[ -n ${externalFile} ]]; then
+        if [[ ! -f ${externalFile} ]]; then # external file should be around
+          printf -v secondErrorMsg "File ${externalFile} should exist but was deleted"
+          updateSuccessCnt="N"
+        else
+          updateSuccessCnt="Y"
+        fi
       fi
     fi
   
@@ -476,7 +499,7 @@ EOF
       (( ++errorCnt ))
       addToErrorFile  # create ouput error file from shell ouput
       printOutput
-      exitOnError 
+      testErrorExit 
     fi
   
     enterToContinue
@@ -486,16 +509,16 @@ EOF
 testsToRun () {
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
   testGroup="initial connection testing"
-  oldExitOnError=${exitOnError}  # exitOnError can be set via command line, but need to test if db is online
+  oldExitOnError=${testErrorExit}  # testErrorExit can be set via command line, but need to test if db is online
   runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
            --testGroup="${testGroup}" --desc="using NEO4J_[USERNAME PASSWORD] environment variables." \
-           --exitOnError            
-  exitOnError="${oldExitOnError}"  # put back original exitOnError if there is one    
+           --testErrorExit            
+  testErrorExit="${oldExitOnError}"  # put back original testErrorExit if there is one    
 
   while true; do
 
     # INVALID PARAMETER TESTS -  none of these test should ever get to executing a query
-    testGroup="Invalid parameter tests"
+    testGroup="invalid parameter tests"
     runShell --expectedRetCode=${RCODE_INVALID_CMD_LINE_OPTS} --inputType="STDIN" \
              --params="--param" \
              --desc="missing cypher-shell parameter argument value."
@@ -562,13 +585,12 @@ testsToRun () {
 
     touch ${TMP_TEST_FILE}
     runShell --expectedRetCode=${RCODE_INVALID_CMD_LINE_OPTS} --inputType="PIPE"  \
-             --params="--file=${TMP_TEST_FILE}"  \
+             --params="--file ${TMP_TEST_FILE}"  \
              --expectedNbrFiles=0 --externalFile="${TMP_TEST_FILE}" \
              --desc="incompatible file input and pipe input."
     rm ${TMP_TEST_FILE}
 
-    # VALID PARAM TESTS
-    testGroup="Valid parameter tests"
+    testGroup="valid parameter tests"
     CYPHER_SHELL="$(which cypher-shell)" # change  if want to use a different cypher-shell  
     runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
              --params="--cypher-shell ${CYPHER_SHELL}"   \
@@ -622,11 +644,32 @@ testsToRun () {
              --params=""   \
              --desc="uid/pw tests - pipe input with no env or -p password defined"
     export NEO4J_PASSWORD=${pw}
- 
+
+    testGroup="bad query tests" 
+    runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN" --qry="${testFailQry}" \
+             --params=""   \
+             --desc="query tests - bad cypher query"
+  
+    runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="PIPE" --qry="${testFailQry}" \
+             --params=""   \
+             --desc="query tests - bad cypher query piped input"
+   
     break # made it to end, exit loop
   done
 }
 
+setDefaults () {
+  # SET THESE VARIABLES
+  TEST_SHELL='../../repl-cypher-shell.sh'  # shell to test! Needs to be set
+  if [[ ! -x ${TEST_SHELL} ]]; then
+    printf "ERROR ${TEST_SHELL} script to be tested does not exist or is not executable.  Bye.\n"
+    exit 1
+  fi
+  DEF_UID="neo4j"  # use if env var NEO4J_USERNAME is not set
+  DEF_PW="admin"   # use if env var NEO4J_PASSWORD is not set
+  DEF_START_TEST_NBR=1   # default test number to start at
+  DEF_END_TEST_NBR=1000  # default test number to end at (some huge #)
+}
 
 #
 # MAIN
@@ -635,12 +678,7 @@ setopt SH_WORD_SPLIT >/dev/null 2>&1
 
 trap interruptShell SIGINT
 
-
-# SET THESE VARIABLES
-TEST_SHELL='../../repl-cypher-shell.sh'  # shell to test! Needs to be set
-DEF_UID="neo4j"  # use if env var NEO4J_USERNAME is not set
-DEF_PW="admin"   # use if env var NEO4J_PASSWORD is not set
-
+setDefaults
 initVars
 getCmdLineArgs "${@}"
 
@@ -651,12 +689,12 @@ for shellToUse in 'zsh'; do
   successCnt=0    # testing success count
   errorCnt=0      # testing error count
   printf "\n+++ Starting using %s\n" "${shellToUse}"
-  testsToRun 
-  if [[ ${dryRun} == 'Y' ]]; then
+  testsToRun # run the darn tests already!
+  if [[ ${dryRun} == 'Y' ]]; then  # output formated dry run
     cat ${RESULTS_OUTPUT_FILE} | tr '\t' '|' | column -t -s '|'
   else
     printf "+++ Finished using %s. %s: %d  %s: %d\n" ${shellToUse} ${successMsg} ${successCnt} ${errorMsg} ${errorCnt}
-    [[ ${errorCnt} -gt 0 ]]  && printf "Look in ${TEST_SHELL_ERR_LOG} for cypher-shell errors\n"
+    [[ ${errorCnt} -gt 0 && ! -s ${TEST_SHELL_ERR_LOG} ]]  && printf "Look in ${TEST_SHELL_ERR_LOG} for cypher-shell errors\n"
   fi
 
   [[ ${errorCnt} -ne 0 || ${dryRun} == 'Y' ]] && break || continue # 1st shell fails then 2nd likely will also
