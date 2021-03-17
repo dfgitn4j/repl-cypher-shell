@@ -30,8 +30,8 @@ help() {
    --help               This message.
 
    NOTE: 
-     The variables uid, pw, testErrorExit and returnToCont can all be 
-     changed before each test is run.
+     The variables uid, pw, testErrorExit and returnToCont can all be changed
+     before each test is run.  Defaults are set in function setDefaults().
 
      testErrorExit and returnToCont variable values are 'Y' to enable, anything 
      else to disable. Using command line flags sets the variable to 'Y', must 
@@ -73,7 +73,7 @@ getCmdLineArgs () {
     fi
 
     # validate command line args
-    if [[ ! -z ${errorMsg} ]]; then
+    if [[ -n ${errorMsg} ]]; then
       printf "%s\n" "${errorMsg}"
       help
       [[ ${errorMsg} == "help" ]] && exit 0 || exit 1
@@ -82,39 +82,26 @@ getCmdLineArgs () {
   done
 
   # test number to start and end at
-  startTestNbr=${startTestNbr:-${DEF_START_TEST_NBR}}    
-  endTestNbr=${endTestNbr:-${DEF_END_TEST_NBR}}          
   if [[ ${startTestNbr} -gt ${endTestNbr} ]]; then
-    printf "ERROR for options: --startTestNbr=${startTestNbr} cannot be greater than --endTestNbr=${endTestNbr}\n"
+    printf '%s\n' "ERROR for options: --startTestNbr=${startTestNbr} cannot be greater than --endTestNbr=${endTestNbr}\n"
     exit 1
   fi
   
   # set defaults for flag parameters
-  testErrorExit="${testErrorExit:-N}"    # default is not to stop on error
   dryRun="${dryRun:-N}"              # show what would be run with step #
   returnToCont="${returnToCont:-N}"  # press enter to continue to next test
 
-
-  uid="${uid:-${DEF_UID}}"
-  pw="${pw:-${DEF_PW}}"
-  if [[ -n ${uid} ]]; then  # did not override user id
-    if [[ -n ${NEO4J_USERNAME} ]]; then # NEO4J_USERNAME env var does not exist
-      uid=${DEF_UID}
-      export NEO4J_USERNAME="${uid}"
-      printf "Setting environment variable NEO4J_USERNAME=${uid}"
-    else
-      printf "Using NEO4J_USERNAME=${NEO4J_USERNAME}"
-    fi
+  # use environment variable for uid and pw if set and not overridden, ow use defaults
+  if [[ -n ${uid} ]]; then  # provide uid
+    export NEO4J_USERNAME="${uid}"
+  elif [[ -z ${NEO4J_USERNAME} ]]; then # NEO4J_USERNAME env var does not exist
+    export NEO4J_USERNAME="${DEF_UID}"
   fi
 
-  if [[ -n ${pw} ]]; then  # did not override user id
-    if [[ -n ${NEO4J_PASSWORD} ]]; then # NEO4J_USERNAME env var does not exist
-      pw=${DEF_PW}
-      export NEO4J_PASSWORD="${pw}"
-      printf "Setting environment variable NEO4J_PASSWORD=${pw}"
-    else
-      printf "Using NEO4J_PASSWORD=${NEO4J_PASSWORD}"
-    fi
+  if [[ -n ${pw} ]]; then  # provide pw
+    export NEO4J_PASSWORD="${pw}"
+  elif [[ -z ${NEO4J_PASSWORD} ]]; then # NEO4J_PASSWORDenv var does not exist
+    export NEO4J_PASSWORD=${DEF_PW}
   fi
 }
 
@@ -138,7 +125,7 @@ EOV
 
 initVars () {
   extractTestingVars  # get required variables from $TEST_SHELL being tested
-  # testing shell and default uid / pw. 
+
   declare -a currentParams # array to hold parameters set for each run. reset in setEnvParams
   # Constants / defaults
   successMsg="PASS"  # output msgs
@@ -159,12 +146,15 @@ initVars () {
   # testing queries and grep for success
   testSuccessQry="WITH 1 AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;"
   testFailQry="WITH 1 AS CYPHER_SUCCESS RETURN gibberish;"
-  testParamQry='WITH $strParam AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;'
+
   testSuccessGrep="grep -c --color=never CYPHER_SUCCESS"
 
   # parameter tests
-  testParamParams="--param 'x => 2' --param 'strParam => \"goodParam\"'"
-  testParamGrep="grep -c --color=never goodParam"
+  # \" to escape double quotes. will have to manipulate again in setEnv to dodge expansion
+  testParamParams="--param 'x => 2' --param 'strParam => \""goodParamVal"\"'"
+  testParamGrep="grep -c --color=never goodParamVal"
+  # testParamGrep="grep -c --color=never x"
+  testParamQry='WITH \$strParam AS CYPHER_SUCCESS RETURN CYPHER_SUCCESS ;'
 
   MY_FILE_NAME="myFileName" # for testing defining input name
 
@@ -190,25 +180,27 @@ exitShell () {
   rm ${QRY_OUTPUT_FILE} 2>/dev/null
   rm ${TEST_SHELL_OUTPUT} 2>/dev/null # remove cypher-shell output log
 
+  [[ -f ${TEST_SHELL_ERR_LOG} ]] && printf "%s\n" "Error output in file: ${TEST_SHELL_ERR_LOG}"
+
   existingFileCnt ""  "${saveAllPostfix}" # should be no files. error if there is
   if [[ ${fileCnt} -ne 0 ]]; then
     printf "Please clean up %d previous output files. Tests can fail when they shouldn't if left in place.\n\n" ${fileCnt} 
     find * -type f -depth 0 | grep  -E "${1}" 
     printf "%s\n\n" "Bye."
   fi
-  rm ${TEST_SHELL_OUTPUT} 2>/dev/null  # remove cypher-shell output log
+  # rm ${TEST_SHELL_OUTPUT} 2>/dev/null  # remove cypher-shell output log
   exit ${1:-0}
 }
 
 interruptShell () {
   printf "\nCtl-C pressed. Bye.\n\n"
+  exec <&- # close stdin
   exitShell 1
 }
 
-testErrorExit () {
+doExitOnError () {
   if [[ ${testErrorExit} == "Y" ]]; then
     printf "%s\n" "Encountered a testing error and testErrorExit = '${testErrorExit}'." 
-    [[ -f ${TEST_SHELL_ERR_LOG} ]] && printf "%s\n" "Error output in file: ${TEST_SHELL_ERR_LOG}"
     exitShell 1
   fi 
 }
@@ -219,8 +211,20 @@ exitInternalError () {
   exit 1
 }
 
-enterToContinue () {
-  if [[ ${returnToCont} == "Y" ]]; then
+finalOutput () {
+  if [[ ${dryRun} == 'Y' ]]; then  # output formated dry run
+    cat ${RESULTS_OUTPUT_FILE} | tr '\t' '|' | column -t -s '|'
+  else
+    printf "+++ Finished using %s. %s: %d  %s: %d\n" "${shellToUse}" "${successMsg}" "${successCnt}" "${errorMsg}" "${errorCnt}"
+    [[ ${errorCnt} -gt 0 && ! -s ${TEST_SHELL_ERR_LOG} ]]  && printf "Look in ${TEST_SHELL_ERR_LOG} for cypher-shell errors\n"
+  fi
+  exitShell 0
+}
+
+doContinue () {
+  if [[ -n ${endTestNbr} && ${runCnt} -eq ${endTestNbr} ]]; then # ran last test
+    finalOutput
+  elif [[ ${returnToCont} == "Y" ]]; then
     printf 'Enter to continue.'
     read n
   fi
@@ -235,13 +239,11 @@ existingFileCnt () {
   fileCnt=$(printf '%0d' $(find "${saveDir}" -type f -depth 1 | grep --color=never -E "${1}" | grep --color=never -E "${2}" | wc -l ) )
 }
 
-
-
 # output for screen and results file
 printOutput () {
   # output to RESULTS_OUTPUT_FILE is tab delimited for use with column command
   if [[ ${dryRun} == "Y" ]]; then
-    if [[ ${runCnt} -eq 1 ]]; then
+    if [[ ${runCnt} -eq ${startTestNbr}  ]]; then
       #printf  "Test Exp  Input\n" > ${RESULTS_OUTPUT_FILE}
       #printf  "Nbr  Code Type \tExpected Shell Exit Var\t\tCalling Params\tTesting Group\tShell\tDescription\n" >> ${RESULTS_OUTPUT_FILE}
       printf  "Test\t            \tExp\tInput \tExpected\n" > ${RESULTS_OUTPUT_FILE}
@@ -253,14 +255,15 @@ printOutput () {
            ${errVarNames[@]:${expectedRetCode}:1}  \
            "'${params}'"  "'${shellToUse}'" "'${desc}'" >> ${RESULTS_OUTPUT_FILE}
   else # runnning test print to screen and detail file
-    if [[ ${runCnt} -eq 1 ]]; then
+    if [[ ${runCnt} -eq ${startTestNbr} ]]; then
       printf  "Test\tTest  \tExit\tExp \tInput\t              \tExpected\n" > ${RESULTS_OUTPUT_FILE}
       printf  "Nbr \tResult\tCode\tCode\tType \tShell Exit Var\tShell Exit Var\tCalling Params\tTesting Group\tError Msg\tShell\tDescription\n" >> ${RESULTS_OUTPUT_FILE}
     fi
-
-    printf "%s  Exit Code: %d  Exp Code: %d Input: %-6s Shell: %-4s Desc: %s" \
-           "${outputMsg}" "${actualRetCode}" "${expectedRetCode}" "${inputType}" "${shellToUse}"  "${desc}"
+    # truncating $testGroup string to 20 characters
+    printf "%s  Grp: %.20s  Exit Code: %d  Exp Code: %d Input: %-6s Shell: %-4s Desc: %s" \
+           "${outputMsg}" "${testGroup}                    " "${actualRetCode}" "${expectedRetCode}" "${inputType}" "${shellToUse}"  "${desc}"
     [[ -n ${secondErrorMsg} ]] && printf "%s\n" " **ERROR: ${secondErrorMsg}" || printf "\n"
+
     printf "%02d\t%s\t%d\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
            ${runCnt} ${outputMsg} ${actualRetCode} ${expectedRetCode} ${inputType} \
            ${errVarNames[@]:${actualRetCode}:1} ${errVarNames[@]:${expectedRetCode}:1}  \
@@ -288,6 +291,7 @@ printOutput () {
 setEnvParams () {
   # unsest previous environment vars
   # testGrp, testErrorExit and returnToCont stay set until expliclty changed
+
   for envVar in "${currentParams[@]}"; do 
     [[ ${envVar} != "testErrorExit" && ${envVar} != "returnToCont" && ${envVar} != "testGroup" ]] && unset "${envVar}"
   done
@@ -296,10 +300,10 @@ setEnvParams () {
   while [ $# -gt 0 ]; do
     if [[ ${1} == *"--"* ]]; then
       paramName="${1/--/}"
-      
+      paramName="$(echo $paramName | sed -e 's/"/\\"/g')" # escape double quotes!
       if [[ ${paramName} == *"="* ]]; then
-        paramVal=${paramName#*=}
-        paramName=${paramName%%=*}  # %% to remove longest string w/ =
+        paramVal="${paramName#*=}"
+        paramName="${paramName%%=*}" # %% to remove longest string w/ =
         eval "$paramName=\"${paramVal}\""  # set parameter value
       else
         eval "${paramName}='Y'"
@@ -310,9 +314,6 @@ setEnvParams () {
   done
 
   # if not provided, provide defaults for parameters that need to be set 
-    # set Neo4j uid / pw to a value if env vars not set. Easier testing if
-    # done with environment variables. 
-
   expectedNbrFiles=${expectedNbrFiles:-0}  # expected number of output files
   shellToUse="${shellToUse:-zsh}"          # shell to use
   inputType="${inputType:-STDIN}"          # input types are STDIN, PIPE and FILE
@@ -326,7 +327,7 @@ setEnvParams () {
   # process parameters
   if [[ -z ${saveDir} ]]; then # $saveDir var exists, but it empty
     saveDir="."
-  elif [[ ! -n ${saveDir} ]]; then # --saveDir option specified w/o a directory, use default
+  elif [[ -z ${saveDir} ]]; then # --saveDir option specified w/o a directory, use default
     saveDir="${DEF_SAVE_DIR}"
   fi # directory supplied
 
@@ -357,9 +358,9 @@ setEnvParams () {
 
 addToErrorFile () {
   # remove ctl characters from cypher output 
-  [[ -s ${TEST_SHELL_OUTPUT} ]] && return  # nothing to print
-  printf -v errStr '==================== ERROR on run number: %02d ====================' ${runCnt}
-  printf '%s\n\n' "${errStr}" >> ${TEST_SHELL_ERR_LOG}
+  [[ ! -s ${TEST_SHELL_OUTPUT} ]] && return  # nothing to print
+  printf -v errStr '==================== ERROR on run number: %02d ====================' "${runCnt}"
+  printf '%s\n\n' "${errStr}" >> "${TEST_SHELL_ERR_LOG}"
 
   # remove inserted less control characters / extrainous blank lines
   grep --color=never -o "[[:print:][:space:]]*" ${TEST_SHELL_OUTPUT} | sed -e '/^$/d' >> ${TEST_SHELL_ERR_LOG}
@@ -411,10 +412,6 @@ addToErrorFile () {
   #
   #     --saveAll                Save results and query output
 runShell () {
-
-  setEnvParams "${@}"
-
-  isError="N"
   saveFileCnt=0
   secondErrorMsg="" # error not triggered by an invalid return code
   updateSuccessCnt="N" # assume we're going to have successfull tests
@@ -422,71 +419,76 @@ runShell () {
   runCnt=${runCnt:-0}
   (( runCnt++ ))
 
-  if [[ -n ${startTestNbr} || -n ${endTestNbr} ]] && [[ ${runCnt} -lt ${startTestNbr} || ${runCnt} -gt ${endTestNbr} ]]; then
-    [[ -n ${startTestNbr} && ${runCnt} -eq 1 ]] && printf "%s" "Starting test at run number: ${startTestNbr}"
-    [[ -n ${endTestNbr} && ${runCnt} -eq 1 ]] && printf "%s" " and ending test at run number: ${endTestNbr}"
+  # print screen output run number parameters
+  if [[ ${runCnt} -eq 1 ]] && [[ -n ${startTestNbr} || -n ${endTestNbr} ]]; then
+    [[ -n ${startTestNbr} ]] && printf "%s" "Starting test at run number: ${startTestNbr}"
+    [[ -n ${endTestNbr} ]] && printf "%s" " and ending test at run number: ${endTestNbr}"
     [[ ${runCnt} -eq 1 ]] && printf "\n"
+  fi
+
+  if [[ -n ${startTestNbr} && ${runCnt} -lt ${startTestNbr} ]]; then
     return
-  elif [[ ${dryRun} == 'Y' ]]; then
-    printOutput
-  else # run test
-    # start test
-    printf "%02d. " ${runCnt}  # screen output count
+  else
+    setEnvParams "${@}"
+    if [[ ${dryRun} == 'Y' ]]; then
+      printOutput
+    else # run test
+      printf "%02d. " "${runCnt}"  # screen output count
   
-    if [[ ${inputType} == "STDIN" ]]; then
-      # need the -1 "run once" flag to avoid input loop. makes life much easier
-      ${shellToUse} "${TEST_SHELL}" -1 ${params} >"${QRY_OUTPUT_FILE}" 2>&1 >${TEST_SHELL_OUTPUT} <<EOF
-      ${qry} 
+      if [[ ${inputType} == "STDIN" ]]; then
+        # need the -1 "run once" flag to avoid input loop. makes life much easier
+        eval "${shellToUse}" "${TEST_SHELL}" -1 "${params}" >"${QRY_OUTPUT_FILE}"  2>&1 >"${TEST_SHELL_OUTPUT}"<<EOF
+        ${qry}
 EOF
-      actualRetCode=$?
-    elif [[ ${inputType} == "PIPE" ]]; then
-      echo ${qry} |  ${shellToUse} "${TEST_SHELL}"  ${params} >"${QRY_OUTPUT_FILE}" 2>&1 >${TEST_SHELL_OUTPUT}
-      actualRetCode=$?
-    elif [[ ${inputType} == "FILE" ]]; then # expecting -f <filename> parameter
-      ${shellToUse} ${TEST_SHELL} -1 ${params} >"${QRY_OUTPUT_FILE}" 2>&1 >>${TEST_SHELL_OUTPUT}
-      actualRetCode=$?
-    fi 
+        actualRetCode=$?
+      elif [[ ${inputType} == "PIPE" ]]; then
+        echo "${qry}" | eval "${shellToUse}" "${TEST_SHELL}" "${params}" >"${QRY_OUTPUT_FILE}" 2>&1 >${TEST_SHELL_OUTPUT}
+        actualRetCode=$?
+      elif [[ ${inputType} == "FILE" ]]; then # expecting -f <filename> parameter
+        ${shellToUse} "${TEST_SHELL}" -1 "${params}" >"${QRY_OUTPUT_FILE}" 2>&1 >>${TEST_SHELL_OUTPUT}
+        actualRetCode=$?
+      fi 
   
-    # if-then-else test pattern instead of collectively because errors can chain. 
-    updateSuccessCnt="N"
-    if [[ ${actualRetCode} -ne ${expectedRetCode} ]]; then
-      printf -v secondErrorMsg "Expected exit code = %d, got %d"  ${expectedRetCode} ${actualRetCode}
-    elif [[ ${expectedNbrFiles} -eq 0 ]]; then # no output files expected.
-      existingFileCnt  "${saveFilePrefix}" "${saveAllPostfix}"
-      if [[ ${fileCnt} -ne 0 ]]; then
-        secondErrorMsg="Output files from shell exist that should not be there."
-      else
-        updateSuccessCnt="Y"
-      fi
-    elif [[ ! -z ${grepPattern} ]] && [[ $(eval "${grepPattern} ${QRY_OUTPUT_FILE}") -eq 0 ]]; then # output of grep cmd should be > 0
-        printf -v secondErrorMsg "%s" "grep command '${grepPattern}' on output file: ${QRY_OUTPUT_FILE} failed."
-    else
-      if [[ ${saveCypher} == "Y" ]]; then # file existence and file content existence tests
-        existingFileCnt "${saveFilePrefix}" "${saveQryFilePostfix}"
-        saveFileCnt=$(( saveFileCnt+fileCnt ))
-      fi
-  
-      if [[ ${saveResults} == "Y" ]]; then # file existence and file content existence tests
-        existingFileCnt "${saveFilePrefix}" "${saveUserDefFilePrefix}"
-        saveFileCnt=$(( saveFileCnt+fileCnt ))
-      fi
-      if [[ ${saveFileCnt} -ne ${expectedNbrFiles} ]]; then
-        printf -v secondErrorMsg "%s" "Expected ${expectedNbrFiles} output files, got ${fileCnt}"
-      else
-        updateSuccessCnt="Y"
-      fi
-      if [[ -n ${externalFile} ]]; then
-        if [[ ! -f ${externalFile} ]]; then # external file should be around
-          printf -v secondErrorMsg "File ${externalFile} should exist but was deleted"
-          updateSuccessCnt="N"
+      # if-then-else test pattern instead of collectively because errors can chain. 
+      updateSuccessCnt="N"
+      if [[ ${actualRetCode} -ne ${expectedRetCode} ]]; then
+        printf -v secondErrorMsg "Expected exit code = %d, got %d"  "${expectedRetCode}" "${actualRetCode}"
+      elif [[ ${expectedNbrFiles} -eq 0 ]]; then # no output files expected.
+        existingFileCnt  "${saveFilePrefix}" "${saveAllPostfix}"
+        if [[ ${fileCnt} -ne 0 ]]; then
+          secondErrorMsg="Output files from shell exist that should not be there."
         else
           updateSuccessCnt="Y"
+        fi
+      elif [[ ! -z ${grepPattern} ]] && [[ $(eval "${grepPattern} ${QRY_OUTPUT_FILE}") -eq 0 ]]; then # output of grep cmd should be > 0
+          printf -v secondErrorMsg "%s" "grep command '${grepPattern}' on output file: ${QRY_OUTPUT_FILE} failed."
+      else
+        if [[ ${saveCypher} == "Y" ]]; then # file existence and file content existence tests
+          existingFileCnt "${saveFilePrefix}" "${saveQryFilePostfix}"
+          saveFileCnt=$(( saveFileCnt+fileCnt ))
+        fi
+    
+        if [[ ${saveResults} == "Y" ]]; then # file existence and file content existence tests
+          existingFileCnt "${saveFilePrefix}" "${saveUserDefFilePrefix}"
+          saveFileCnt=$(( saveFileCnt+fileCnt ))
+        fi
+        if [[ ${saveFileCnt} -ne ${expectedNbrFiles} ]]; then
+          printf -v secondErrorMsg "%s" "Expected ${expectedNbrFiles} output files, got ${fileCnt}"
+        else
+          updateSuccessCnt="Y"
+        fi
+        if [[ -n ${externalFile} ]]; then
+          if [[ ! -f ${externalFile} ]]; then # external file should be around
+            printf '%s' -v secondErrorMsg "File ${externalFile} should exist but was deleted"
+            updateSuccessCnt="N"
+          else
+            updateSuccessCnt="Y"
+          fi
         fi
       fi
     fi
   
-    # cleanup and return
-    rm ${QRY_OUTPUT_FILE} # remove transient transient output file
+    # cleanup 
     if [[ "${updateSuccessCnt}" == "Y" ]]; then  # clean up qry and results files regardless
       for rmFile in $(find "${saveDir}" -type f -depth 1 | grep --color=never -E "${saveAllPostfix}" ) ; do
         rm ${rmFile}
@@ -494,23 +496,24 @@ EOF
       outputMsg="${successMsg}"
       (( ++successCnt ))
       printOutput
+      rm ${QRY_OUTPUT_FILE} # remove transient transient output file
     else # error
       outputMsg="${errorMsg}" # for screen and runtime log output
       (( ++errorCnt ))
       addToErrorFile  # create ouput error file from shell ouput
       printOutput
-      testErrorExit 
+      doExitOnError 
     fi
   
-    enterToContinue
-  fi # if ! dryRun
+    doContinue
+  fi # if runCnt < startTestNbr
 }
 
 testsToRun () {
   # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
-  testGroup="initial connection testing"
+  testGroup="initial connection"
   oldExitOnError=${testErrorExit}  # testErrorExit can be set via command line, but need to test if db is online
-  runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+  runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
            --testGroup="${testGroup}" --desc="using NEO4J_[USERNAME PASSWORD] environment variables." \
            --testErrorExit            
   testErrorExit="${oldExitOnError}"  # put back original testErrorExit if there is one    
@@ -518,7 +521,7 @@ testsToRun () {
   while true; do
 
     # INVALID PARAMETER TESTS -  none of these test should ever get to executing a query
-    testGroup="invalid parameter tests"
+    testGroup="invalid parameters"
     runShell --expectedRetCode=${RCODE_INVALID_CMD_LINE_OPTS} --inputType="STDIN" \
              --params="--param" \
              --desc="missing cypher-shell parameter argument value."
@@ -590,69 +593,116 @@ testsToRun () {
              --desc="incompatible file input and pipe input."
     rm ${TMP_TEST_FILE}
 
-    testGroup="valid parameter tests"
+    testGroup="valid parameters"
     CYPHER_SHELL="$(which cypher-shell)" # change  if want to use a different cypher-shell  
-    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
              --params="--cypher-shell ${CYPHER_SHELL}"   \
              --desc="explicitly set cypher-shell executable with --cypher-shell."
   
-    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN"  \
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN"  \
              --params="--version"   \
              --desc="cypher-shell one-and-done version arg."
   
-    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="PIPE"  \
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="PIPE"  \
              --params="--version"   \
              --desc="param test - cypher-shell one-and-done version arg."
   
-    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="PIPE" --qry="${testSuccessQry}" \
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="PIPE" --qry="${testSuccessQry}" \
              --params="--address localhost"  \
-             --desc="good thru argument to cypher-shell."
+             --desc="connect localhost."
+
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testParamQry}" \
+             --params="${testParamParams}"  \
+             --grepPattern="${testParamGrep}" \
+             --desc="multiple valid args."
+
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="PIPE" --qry="${testParamQry}" \
+           --params="${testParamParams}"  \
+           --grepPattern="${testParamGrep}" \
+           --desc="multiple valid args."
   
-    testGroup="uid / pwd tests"
-    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+    testGroup="uid / pwd"
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
              --params="-u ${uid} -p ${pw}"  \
-             --desc="uid/pw tests - using -u and and -p arguments"
+             --desc="using -u and and -p arguments"
   
-    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
              --params="-u ${uid}"   \
-             --desc="uid/pw tests - using -u and NEO4J_PASSWORD environment variable."
+             --desc="using -u and NEO4J_PASSWORD environment variable."
   
-    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
              --params="-p ${pw}"   \
-             --desc="uid/pw tests - using -p and NEO4J_USERNAME environment variable."
+             --desc="using -p and NEO4J_USERNAME environment variable."
   
-    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}" \
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
              --params="-p ${pw}"   \
-             --desc="uid/pw tests - using -p and NEO4J_USERNAME environment variable."
+             --desc="using -p and NEO4J_USERNAME environment variable."
   
     runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN" --qry="${testSuccessQry}" \
              --params="-p ${pw}xxx"  \
-             --desc="uid/pw tests - using -u bad password"
+             --desc="using -u bad password"
   
     runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN" --qry="${testSuccessQry}" \
              --params="-u ${uid}xxx"  \
-             --desc="uid/pw tests - using -u bad username"
+             --desc="using -u bad username"
     
     unset NEO4J_USERNAME
     runShell --expectedRetCode=${RCODE_NO_USER_NAME} --inputType="PIPE" --qry="${testSuccessQry}" \
              --params=""   \
-             --desc="uid/pw tests - pipe input with no env or -u usename defined"
+             --desc="pipe input with no env or -u usename defined"
     export NEO4J_USERNAME=${uid}
   
     unset NEO4J_PASSWORD
     runShell --expectedRetCode=${RCODE_NO_PASSWORD} --inputType="PIPE" --qry="${testSuccessQry}" \
              --params=""   \
-             --desc="uid/pw tests - pipe input with no env or -p password defined"
+             --desc="pipe input with no env or -p password defined"
     export NEO4J_PASSWORD=${pw}
 
-    testGroup="bad query tests" 
+    testGroup="bad query" 
     runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN" --qry="${testFailQry}" \
              --params=""   \
-             --desc="query tests - bad cypher query"
+             --desc="bad cypher query"
   
     runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="PIPE" --qry="${testFailQry}" \
-             --params=""   \
-             --desc="query tests - bad cypher query piped input"
+             --params=""  \
+             --desc="bad cypher query piped input"
+
+  testGroup="query scenarios" 
+  runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
+           --params="--time"   \
+           --grepPattern="${testTimeParamGrep}" \
+           --desc="--time parameter output."
+
+  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="STDIN" --qry="" \
+           --params=""  \
+           --desc="query tests - empty cypher query"
+
+  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="PIPE"  \
+           --params=""  \
+           --desc="query tests - empty cypher query"
+
+  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="STDIN"  \
+           --params="-t -c --quiet"   \
+           --desc="query tests - empty cypher query with --quiet"
+
+  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="PIPE"  \
+           --params="-t -c --quiet"   \
+           --desc="query tests - empty cypher query with --quiet"
+  
+  runShell --expectedRetCode=${RCODE_MISSING_INPUT_FILE} --inputType="FILE"  \
+           --params="--file NoFile22432.cypher"  \
+           --desc="query / file tests - run external cypher file missing file"
+
+  printf '%s' "${testSuccessQry}" > ${TMP_TEST_FILE}
+  runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="FILE"  \
+           --params="--file=${TMP_TEST_FILE}" --externalFile="${TMP_TEST_FILE}"  \
+           --desc="query / file tests - run external cypher file with valid query, validate output"
+
+  printf '%s' "${TEST_SHELL}" > ${TMP_TEST_FILE}
+  printf '%s' "${testSuccessQry}" >> ${TMP_TEST_FILE}
+  runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="FILE"  \
+           --params="--file=${TMP_TEST_FILE}" --externalFile="${TMP_TEST_FILE}" \
+           --desc="query / file tests - executing $ at beginning of text before cypher"
    
     break # made it to end, exit loop
   done
@@ -662,13 +712,14 @@ setDefaults () {
   # SET THESE VARIABLES
   TEST_SHELL='../../repl-cypher-shell.sh'  # shell to test! Needs to be set
   if [[ ! -x ${TEST_SHELL} ]]; then
-    printf "ERROR ${TEST_SHELL} script to be tested does not exist or is not executable.  Bye.\n"
+    printf '%s' "ERROR ${TEST_SHELL} script to be tested does not exist or is not executable.  Bye.\n"
     exit 1
   fi
   DEF_UID="neo4j"  # use if env var NEO4J_USERNAME is not set
   DEF_PW="admin"   # use if env var NEO4J_PASSWORD is not set
   DEF_START_TEST_NBR=1   # default test number to start at
   DEF_END_TEST_NBR=1000  # default test number to end at (some huge #)
+  testErrorExit="N"      # default is not to stop on error
 }
 
 #
@@ -690,12 +741,7 @@ for shellToUse in 'zsh'; do
   errorCnt=0      # testing error count
   printf "\n+++ Starting using %s\n" "${shellToUse}"
   testsToRun # run the darn tests already!
-  if [[ ${dryRun} == 'Y' ]]; then  # output formated dry run
-    cat ${RESULTS_OUTPUT_FILE} | tr '\t' '|' | column -t -s '|'
-  else
-    printf "+++ Finished using %s. %s: %d  %s: %d\n" ${shellToUse} ${successMsg} ${successCnt} ${errorMsg} ${errorCnt}
-    [[ ${errorCnt} -gt 0 && ! -s ${TEST_SHELL_ERR_LOG} ]]  && printf "Look in ${TEST_SHELL_ERR_LOG} for cypher-shell errors\n"
-  fi
+  finalOutput
 
   [[ ${errorCnt} -ne 0 || ${dryRun} == 'Y' ]] && break || continue # 1st shell fails then 2nd likely will also
 done
