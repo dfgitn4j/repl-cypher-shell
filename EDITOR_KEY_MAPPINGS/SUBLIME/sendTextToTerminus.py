@@ -1,4 +1,4 @@
-import sublime
+lsimport sublime
 import sublime_plugin
 
 # how to add command tutorial: https://www.youtube.com/watch?v=lBgDilqulxg&feature=youtu.be

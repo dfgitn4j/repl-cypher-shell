@@ -2,7 +2,7 @@
  // send selected text to terminal and run key sequence is mapped
  // to the ctl-enter key combination
 
- repl-cypher-shell.sh  -u  neo4j
+./repl-cypher-shell.sh  -u  neo4j
 
 // movies query - less example
 

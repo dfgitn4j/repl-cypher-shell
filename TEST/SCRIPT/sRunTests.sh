@@ -12,13 +12,15 @@ help() {
  cat << USAGE
 
  Valid command line options:
-   --uid=<string>       Neo4j user login. Default is ${DEF_UID}.  
-   --pw=<string>        Neo4j user password. Default is ${DEF_PW}.    
+   --uid=<string>       Neo4j user login. Default is ${DEF_UID}. Stays 
+                        enabled unless reset.            
+   --pw=<string>        Neo4j user password. Default is ${DEF_PW}. Stays 
+                        enabled unless reset.              
    
-   --testErrorExit      Stop testing on error. Default is to keep running.
-                        Stays enabled unless reset.     
-   --returnToCont       Press <RETURN> to continue after each test. Stays 
-                        enabled unless reset.           
+   --testErrorExit      Stop testing on error. Default is 'N'. Will stay set 
+                        across tests until changed.      
+   --returnToCont       Press <RETURN> to continue after each test. Default 
+                        is 'N'. Will stay set across tests until changed.  
    
    --dryRun             Print what tests would be run. 
    --startTestNbr=<nbr> Begin at test number 'nbr'. Default is ${DEF_START_TEST_NBR}.
@@ -30,13 +32,22 @@ help() {
    --help               This message.
 
    NOTE: 
-     The variables uid, pw, testErrorExit and returnToCont can all be changed
-     before each test is run.  Defaults are set in function setDefaults().
+    The variables uid, pw, testErrorExit, returnToCont and testGroup can all be changed
+    before each test is run. Once set these variables they stay set. 
 
-     testErrorExit and returnToCont variable values are 'Y' to enable, anything 
-     else to disable. Using command line flags sets the variable to 'Y', must 
-     be disabled explicitly in code. 
+    --testErrorExit, --returnToCont 
+      - Defaults are set in function setDefaults().
+      - using flag sets value to "Y", or can be explicitly set using = pattern, e.g.
+          --testErrorExit="N"
 
+    --uid, --pw
+      - If defined then the environment variables NEO4J_USERNAME and NEO4J_PASSWORD
+        are also set.  This avoids having to provide a uid and pw parameter to every 
+        testing call.
+      - If not defined, then the environment variables are used. 
+      - If the environment variables are not set then the script variable values 
+        DEF_UID and DEF_PW are used and are set in function setDefaults()
+      - Values stay set until reset. 
 USAGE
 }
 
@@ -54,9 +65,8 @@ getCmdLineArgs () {
       else # just setting flag
         eval "${paramName}='Y'"
       fi
-
-      echo "${validOpts}" | grep --quiet "$paramName "
-      if [[ $? -ne 0 ]]; then  # ck for invalid parameter name
+      
+      if ! echo "${validOpts}" | grep --quiet "$paramName " ; then  # ck for invalid parameter name
         errorMsg="ERROR: Bad command line argument '${paramName}'. Valid values are ${validOpts}, passed in: ${@}"
       elif [[ ${paramName} == "printVars" ]]; then # print extracted vars and exit if --printVars cmd line option
         printExtractedVars  
@@ -69,7 +79,7 @@ getCmdLineArgs () {
         errorMsg="ERROR for option: --endTestNbr '${1}'"
       fi
     else
-      errorMsg="ERROR: Invalid parameter '${1}'"
+      errorMsg="ERROR: Invalid command line parameter '${1}'"
     fi
 
     # validate command line args
@@ -82,8 +92,8 @@ getCmdLineArgs () {
   done
 
   # test number to start and end at
-  if [[ ${startTestNbr} -gt ${endTestNbr} ]]; then
-    printf '%s\n' "ERROR for options: --startTestNbr=${startTestNbr} cannot be greater than --endTestNbr=${endTestNbr}\n"
+  if [[ -n ${startTestNbr} && -n ${endTestNbr} ]] && [[ ${startTestNbr} -gt ${endTestNbr} ]]; then
+    printf '%s\n' "ERROR for options: --startTestNbr=${startTestNbr} cannot be greater than --endTestNbr=${endTestNbr}"
     exit 1
   fi
   
@@ -91,17 +101,28 @@ getCmdLineArgs () {
   dryRun="${dryRun:-N}"              # show what would be run with step #
   returnToCont="${returnToCont:-N}"  # press enter to continue to next test
 
-  # use environment variable for uid and pw if set and not overridden, ow use defaults
-  if [[ -n ${uid} ]]; then  # provide uid
+  # use environment variable for uid and pw if set and not overridden, ow use defaults.
+  # setting env vars avoids having to pass uid and pw to script every time.
+  if [[ -n ${uid} ]]; then  # uid defined, override environment variable
     export NEO4J_USERNAME="${uid}"
-  elif [[ -z ${NEO4J_USERNAME} ]]; then # NEO4J_USERNAME env var does not exist
-    export NEO4J_USERNAME="${DEF_UID}"
+  else 
+    if [[ -n ${NEO4J_USERNAME} ]]; then # enviroment variable set
+      uid="${NEO4J_USERNAME}"
+    else
+      uid="${DEF_UID}"
+      export NEO4J_USERNAME="${DEF_UID}"
+    fi
   fi
-
-  if [[ -n ${pw} ]]; then  # provide pw
+  
+  if [[ -n ${pw} ]]; then  # pw defined, override environment variable
     export NEO4J_PASSWORD="${pw}"
-  elif [[ -z ${NEO4J_PASSWORD} ]]; then # NEO4J_PASSWORDenv var does not exist
-    export NEO4J_PASSWORD=${DEF_PW}
+  else 
+    if [[ -n ${NEO4J_PASSWORD} ]]; then # enviroment variable set
+      pw="${NEO4J_PASSWORD}"
+    else
+      pw="${DEF_UID}"
+      export NEO4J_PASSWORD="${DEF_UID}"
+    fi
   fi
 }
 
@@ -118,9 +139,10 @@ EOV
 
   # get output file patterns, assumes variable definition in script is the first pattern that matches
   eval "$(grep --color=never OUTPUT_FILES_PREFIX= ${TEST_SHELL} | head -1)" 
-  eval "$(grep --color=never QRY_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
-  eval "$(grep --color=never RESULTS_FILE_POSTFIX= ${TEST_SHELL} | head -1)"
+  eval "$(grep --color=never DEF_QRY_FILE_EXTSN= ${TEST_SHELL} | head -1)"
+  eval "$(grep --color=never DEF_RESULTS_FILE_EXTSN= ${TEST_SHELL} | head -1)"
   eval "$(grep --color=never DEF_SAVE_DIR= ${TEST_SHELL} | head -1)"
+  eval "$(grep --color=never DEF_OUTPUT_PREFIX= ${TEST_SHELL} | head -1)"
 }
 
 initVars () {
@@ -132,7 +154,7 @@ initVars () {
   errorMsg="FAIL"
 
   # file patterns for file existence test
-  TMP_TEST_FILE=aFile_${RANDOM}${QRY_FILE_POSTFIX}
+  TMP_TEST_FILE=aFile_${RANDOM}${DEF_QRY_FILE_EXTSN}
   QRY_OUTPUT_FILE="qryResults_${RANDOM}.tmpQryOutputFile"
   # RESULTS_OUTPUT_FILE="resultsTestRun-$(date '+%Y-%m-%d_%H:%M:%S')".txt
   RESULTS_OUTPUT_FILE="resultsTestRun.out"
@@ -168,17 +190,17 @@ printExtractedVars () {
   printf "\n=================================\n"
   printf "\n==== Directory / File Vars ======\n\n"
   printf "%s\n" "OUTPUT_FILES_PREFIX=${OUTPUT_FILES_PREFIX}" 
-  printf "%s\n" "QRY_FILE_POSTFIX=${QRY_FILE_POSTFIX}"
-  printf "%s\n" "RESULTS_FILE_POSTFIX=${RESULTS_FILE_POSTFIX}"
+  printf "%s\n" "DEF_QRY_FILE_EXTSN=${DEF_QRY_FILE_EXTSN}"
+  printf "%s\n" "DEF_RESULTS_FILE_EXTSN=${DEF_RESULTS_FILE_EXTSN}"
   printf "%s\n" "DEF_SAVE_DIR=${DEF_SAVE_DIR}" 
   printf "\n=================================\n"
   exit 0
 }
 
 exitShell () {
-  # 1st param is return code, 0 if none specified
-  rm ${QRY_OUTPUT_FILE} 2>/dev/null
-  rm ${TEST_SHELL_OUTPUT} 2>/dev/null # remove cypher-shell output log
+  # 1"st param is return code, 0 if none specified
+  # rm per run query, tmp input qry and output files
+  rm "${QRY_OUTPUT_FILE}" "${TMP_TEST_FILE}" "${TEST_SHELL_OUTPUT}" 2>/dev/null
 
   [[ -f ${TEST_SHELL_ERR_LOG} ]] && printf "%s\n" "Error output in file: ${TEST_SHELL_ERR_LOG}"
 
@@ -271,90 +293,7 @@ printOutput () {
   fi
 }
 
-# Handle file parameters:
- #  [-f | --file]                           File containing query.
- #  [-A | --saveAll]     [allFilesPrefix]   Save cypher query and output results 
- #                                          files with optional user set prefix.
- #  [-R | --saveResults] [resultFilePrefix] Save each results output in to a file 
- #                                          with optional user set prefix.
- #  [-S | --saveCypher]  [cypherFilePrefix] Save each query statement in a file
- #                                          with optional user set prefix.
- #  [-D | --saveDir]     [dirPath]          Directory to save files to.  Default 
- #                                          is ${DEF_SAVE_DIR} if dirPath is not provided. 
- # Scenarios are
- # 1. file containing query. should stay intaact
- # 2. save all / query / results files with:
- #  a. default prefix / postfix
- #  b. user defined prefix / postfix
- # 3. Save to default / user defined sub-directory
- #
-setEnvParams () {
-  # unsest previous environment vars
-  # testGrp, testErrorExit and returnToCont stay set until expliclty changed
 
-  for envVar in "${currentParams[@]}"; do 
-    [[ ${envVar} != "testErrorExit" && ${envVar} != "returnToCont" && ${envVar} != "testGroup" ]] && unset "${envVar}"
-  done
-  currentParams=() # blank set parameter array
-
-  while [ $# -gt 0 ]; do
-    if [[ ${1} == *"--"* ]]; then
-      paramName="${1/--/}"
-      paramName="$(echo $paramName | sed -e 's/"/\\"/g')" # escape double quotes!
-      if [[ ${paramName} == *"="* ]]; then
-        paramVal="${paramName#*=}"
-        paramName="${paramName%%=*}" # %% to remove longest string w/ =
-        eval "$paramName=\"${paramVal}\""  # set parameter value
-      else
-        eval "${paramName}='Y'"
-      fi
-    fi
-    currentParams+=("${paramName}") # add to array to erase next time through
-    shift
-  done
-
-  # if not provided, provide defaults for parameters that need to be set 
-  expectedNbrFiles=${expectedNbrFiles:-0}  # expected number of output files
-  shellToUse="${shellToUse:-zsh}"          # shell to use
-  inputType="${inputType:-STDIN}"          # input types are STDIN, PIPE and FILE
-
-  expectedRetCode="${expectedRetCode:-${RCODE_SUCCESS}}" # pulled from shell being tested
-  qry="${qry:-${testSuccessQry}}" # use succesful query if no query specified
-
-  desc="${desc:-not provided}"             # description is optional
-  testGroup="${testGroup:-not provided}"   # testing group description
-
-  # process parameters
-  if [[ -z ${saveDir} ]]; then # $saveDir var exists, but it empty
-    saveDir="."
-  elif [[ -z ${saveDir} ]]; then # --saveDir option specified w/o a directory, use default
-    saveDir="${DEF_SAVE_DIR}"
-  fi # directory supplied
-
-  if [[ ${saveAll} == "Y" ]]; then   # see what we're saving - vars show explicit intent 
-    saveCypher="Y" 
-    saveResults="Y"
-  else
-    [[ -n ${saveCypher} ]] && saveCypher="Y" || saveCypher="N"
-    [[ -n ${saveResults} ]] && saveResults="Y" || saveResults="N"
-  fi
-
-  # fill in defaults for non-supplied parameters
-  # used in grep to determine file existence 
-  # save file tests can set invidual save[Qry|Results]FilePrefix 
-  if [[ -n ${saveUserDefFilePrefix} ]]; then # user defined prefix, override query and results file prefix
-    saveQryFilePrefix="${saveUserDefFilePrefix}"
-    saveResultsFilePrefix="${saveUserDefFilePrefix}"
-  else # use set value or defaults
-    saveQryFilePrefix="${saveResultsFilePrefix:-${OUTPUT_FILES_PREFIX}}"
-    saveResultsFilePrefix="${saveResultsFilePrefix:-${OUTPUT_FILES_PREFIX}}"
-  fi 
-
-  # all qry and results files have fixed postfix
-  saveQryFilePostfix="${QRY_FILE_POSTFIX}}"  # no longer user defined
-  saveResultsFilePostfix="${RESULTS_FILE_POSTFIX}}" # no longer user defined
-  saveAllPostfix="${saveQryFilePostfix}|${saveResultsFilePostfix}" # used for cleanup file count
-}
 
 addToErrorFile () {
   # remove ctl characters from cypher output 
@@ -370,6 +309,98 @@ addToErrorFile () {
   printf '\n\n'  >> ${TEST_SHELL_ERR_LOG}
 }
 
+# Handle file parameters:
+ # [-f | --file]     <filename>           File containing query.
+ # 
+ # [-A | --saveAll]     [all_file_name]     Save cypher query and output results 
+ #                                          files with optional user set prefix.
+ # [-R | --saveResults] [results_file_name] Save each results output in to a file 
+ #                                          with optional user set prefix.
+ # [-S | --saveCypher]  [cypher_file_name]  Save each query statement in a file
+ #                                          with optional user set prefix.
+ # [-D | --saveDir]     [save_dir]          Path to directory to save files to.  Default 
+ #                                          is ${DEF_SAVE_DIR} if dirPath is not provided. 
+ # Scenarios are
+ # 1. file containing query. should stay intaact
+ # 2. save all / query / results files with:
+ #  a. default prefix / postfix
+ #  b. user defined prefix / postfix
+ # 3. Save to default / user defined sub-directory
+ #
+setEnvParams () {
+  # unsest previous environment vars unless they persist between runTest calls
+  persistParams="testErrorExit returnToCont testGroup allFilesPrefix resultFilePrefix cypherFilePrefix saveDir shellToUse "
+  for envVar in "${currentParams[@]}"; do 
+    if ! echo "$persistParams" | grep --quiet "${envVar}"; then
+      unset "${envVar}"
+    fi
+  done
+  currentParams=() # blank set parameter array
+
+  while [ $# -gt 0 ]; do
+    if [[ ${1} == *"--"* ]]; then
+      paramName="${1/--/}"
+      paramName="$(echo $paramName | sed -e 's/"/\\"/g')" # escape double quotes!
+      if [[ ${paramName} == *"="* ]]; then
+        paramVal="${paramName#*=}"
+        paramName="${paramName%%=*}" # %% to remove longest string w/ =
+        eval "$paramName=\"${paramVal}\""  # set parameter value
+      else
+        eval "${paramName}='Y'"
+      fi
+    else 
+      printf "%s %0d.\n" "ERROR: Invalid runtime testing option '${1}' on test nbr: " $(( ++runCnt ))
+      exit 1
+    fi
+
+    currentParams+=("${paramName}") # add to array to erase next time through
+    shift
+  done
+
+  # if not provided, provide defaults for parameters that need to be set 
+  expectedNbrFiles=${expectedNbrFiles:-0}  # expected number of output files
+  shellToUse="${shellToUse:-zsh}"          # shell to use
+  inputType="${inputType:-STDIN}"          # input types are STDIN, PIPE and FILE
+
+  expectedRetCode="${expectedRetCode:-${RCODE_SUCCESS}}" # pulled from shell being tested
+
+  desc="${desc:-not provided}"             # description is optional
+  testGroup="${testGroup:-not provided}"   # testing group description
+
+  if [[ -n ${saveDir} ]]; then # --saveDir option 
+    if [[ -z ${dirPath} ]]; then # no directory path option for --saveDir set
+      dirPath="${DEF_SAVE_DIR}"
+    fi
+  else # specified w/o a directory, use current
+    dirPath="."
+  fi 
+
+  if [[ -n ${saveAll} ]]; then   # see what we're saving - vars show explicit intent 
+    saveCypher="Y" 
+    saveResults="Y"
+    # if [[ -z ${all_file_name} ]]; then # no file name provided, use default
+  else
+    [[ ${params} == *"saveCypher"* ]] && saveCypher="Y" || saveCypher="N"
+    [[ ${params} == *"saveResults"* ]] && saveResults="Y" || saveResults="N"
+  fi
+
+  # fill in defaults for non-supplied parameters
+  # used in grep to determine file existence 
+  # save file tests can set invidual save[Qry|Results]FilePrefix 
+  if [[ -n ${saveUserDefFilePrefix} ]]; then # user defined prefix, override query and results file prefix
+    saveQryFilePrefix="${saveUserDefFilePrefix}"
+    saveResultsFilePrefix="${saveUserDefFilePrefix}"
+  else # use set value or defaults
+    saveQryFilePrefix="${saveResultsFilePrefix:-${OUTPUT_FILES_PREFIX}}"
+    saveResultsFilePrefix="${saveResultsFilePrefix:-${OUTPUT_FILES_PREFIX}}"
+  fi 
+
+  # all qry and results files have fixed postfix
+  saveQryFilePostfix="${DEF_QRY_FILE_EXTSN}"  # no longer user defined
+  saveResultsFilePostfix="${DEF_RESULTS_FILE_EXTSN}" # no longer user defined
+  saveAllPostfix="${saveQryFilePrefix}*${saveQryFilePostfix}|${saveQryFilePrefix}*${saveResultsFilePostfix}" # used for cleanup file count
+}
+Nx25j6pq7axTnS#pfWrAZDFb$d
 # runShell ()
   # meant to test the various parameter combinations at a surface level, bit of a hack
   #
@@ -406,9 +437,9 @@ addToErrorFile () {
   #   
   #   File saving / test parameters
   #     --expectedNbrFiles       integer for expected number of files, default is 0
-  #     --saveFilePrefix         if not specified the default is ${OUTPUT_FILES_PREFIX}}"
-  #     --saveQryFilePostfix     Cannot be user defined - set to ${QRY_FILE_POSTFIX}}" / changing was removed
-  #     --saveResultsFilePostfix Cannot be user defined - set to ${RESULTS_FILE_POSTFIX}}" / changing was removed
+  #     --saveFilePrefix         if not specified the default is ${OUTPUT_FILES_PREFIX}"
+  #     --saveQryFilePostfix     Cannot be user defined - set to ${DEF_QRY_FILE_EXTSN}" / changing was removed
+  #     --saveResultsFilePostfix Cannot be user defined - set to ${DEF_RESULTS_FILE_EXTSN}" / changing was removed
   #
   #     --saveAll                Save results and query output
 runShell () {
@@ -442,10 +473,10 @@ runShell () {
 EOF
         actualRetCode=$?
       elif [[ ${inputType} == "PIPE" ]]; then
-        echo "${qry}" | eval "${shellToUse}" "${TEST_SHELL}" "${params}" >"${QRY_OUTPUT_FILE}" 2>&1 >${TEST_SHELL_OUTPUT}
+        echo "${qry}" | eval "${shellToUse}" "${TEST_SHELL}" "${params}" >"${QRY_OUTPUT_FILE}" 2>&1 >"${TEST_SHELL_OUTPUT}"
         actualRetCode=$?
       elif [[ ${inputType} == "FILE" ]]; then # expecting -f <filename> parameter
-        ${shellToUse} "${TEST_SHELL}" -1 "${params}" >"${QRY_OUTPUT_FILE}" 2>&1 >>${TEST_SHELL_OUTPUT}
+        eval ${shellToUse} "${TEST_SHELL}" -1 "${params}" >"${QRY_OUTPUT_FILE}" 2>&1 >>"${TEST_SHELL_OUTPUT}"
         actualRetCode=$?
       fi 
   
@@ -467,7 +498,6 @@ EOF
           existingFileCnt "${saveFilePrefix}" "${saveQryFilePostfix}"
           saveFileCnt=$(( saveFileCnt+fileCnt ))
         fi
-    
         if [[ ${saveResults} == "Y" ]]; then # file existence and file content existence tests
           existingFileCnt "${saveFilePrefix}" "${saveUserDefFilePrefix}"
           saveFileCnt=$(( saveFileCnt+fileCnt ))
@@ -510,15 +540,15 @@ EOF
 }
 
 testsToRun () {
-  # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
-  testGroup="initial connection"
-  oldExitOnError=${testErrorExit}  # testErrorExit can be set via command line, but need to test if db is online
-  runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
-           --testGroup="${testGroup}" --desc="using NEO4J_[USERNAME PASSWORD] environment variables." \
-           --testErrorExit            
-  testErrorExit="${oldExitOnError}"  # put back original testErrorExit if there is one    
-
   while true; do
+
+    # INITIAL SNIFF TEST NEO4J_USERNAME and NEO4J_PASSWORD env vars need to be valid
+    testGroup="initial connection"
+    oldExitOnError=${testErrorExit}  # testErrorExit can be set via command line, but need to test if db is online
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
+             --testGroup="${testGroup}" --desc="using NEO4J_[USERNAME PASSWORD] environment variables." \
+             --testErrorExit            
+    testErrorExit="${oldExitOnError}"  # put back original testErrorExit if there is one    
 
     # INVALID PARAMETER TESTS -  none of these test should ever get to executing a query
     testGroup="invalid parameters"
@@ -667,42 +697,72 @@ testsToRun () {
              --params=""  \
              --desc="bad cypher query piped input"
 
-  testGroup="query scenarios" 
-  runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
-           --params="--time"   \
-           --grepPattern="${testTimeParamGrep}" \
-           --desc="--time parameter output."
-
-  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="STDIN" --qry="" \
-           --params=""  \
-           --desc="query tests - empty cypher query"
-
-  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="PIPE"  \
-           --params=""  \
-           --desc="query tests - empty cypher query"
-
-  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="STDIN"  \
-           --params="-t -c --quiet"   \
-           --desc="query tests - empty cypher query with --quiet"
-
-  runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="PIPE"  \
-           --params="-t -c --quiet"   \
-           --desc="query tests - empty cypher query with --quiet"
+    testGroup="query scenarios" 
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="STDIN" --qry="${testSuccessQry}" \
+             --params="--time"   \
+             --grepPattern="${testTimeParamGrep}" \
+             --desc="--time parameter output."
   
-  runShell --expectedRetCode=${RCODE_MISSING_INPUT_FILE} --inputType="FILE"  \
-           --params="--file NoFile22432.cypher"  \
-           --desc="query / file tests - run external cypher file missing file"
+    runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="STDIN" --qry="" \
+             --params=""  \
+             --desc="empty cypher query"
+  
+    runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="PIPE"  \
+             --params=""  \
+             --desc="empty cypher query"
+  
+    runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="STDIN"  \
+             --params="-t -c --quiet"   \
+             --desc="empty cypher query with --quiet"
+  
+    runShell --expectedRetCode=${RCODE_EMPTY_INPUT} --inputType="PIPE"  \
+             --params="-t -c --quiet"   \
+             --desc="empty cypher query with --quiet"
+    
+    runShell --expectedRetCode=${RCODE_MISSING_INPUT_FILE} --inputType="FILE"  \
+             --params="--file NoFile22432.cypher"  \
+             --desc="run external cypher file missing file"
+  
+    printf '%s' "${testSuccessQry}" > ${TMP_TEST_FILE}
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="FILE"  \
+             --params="--file ${TMP_TEST_FILE}" --externalFile="${TMP_TEST_FILE}"  \
+             --desc="run external cypher file with valid query, validate output"
+  
+    # add path to shell to begining of file. used when in text with editor executing cut-paste-run
+    printf '%s\n' "${TEST_SHELL}" > ${TMP_TEST_FILE}
+    printf '%s' "${testSuccessQry}" >> ${TMP_TEST_FILE}
+    runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="FILE"  \
+             --params="--file ${TMP_TEST_FILE}" --externalFile="${TMP_TEST_FILE}" \
+             --desc="executing ${TEST_SHELL} at beginning of text before cypher"
 
-  printf '%s' "${testSuccessQry}" > ${TMP_TEST_FILE}
-  runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="FILE"  \
-           --params="--file=${TMP_TEST_FILE}" --externalFile="${TMP_TEST_FILE}"  \
-           --desc="query / file tests - run external cypher file with valid query, validate output"
-
-  printf '%s' "${TEST_SHELL}" > ${TMP_TEST_FILE}
-  printf '%s' "${testSuccessQry}" >> ${TMP_TEST_FILE}
-  runShell --expectedRetCode="${RCODE_SUCCESS}" --inputType="FILE"  \
-           --params="--file=${TMP_TEST_FILE}" --externalFile="${TMP_TEST_FILE}" \
-           --desc="query / file tests - executing $ at beginning of text before cypher"
+    # SAVE FILE TESTS
+    #  --expectedNbrFiles
+    #  --saveFilePrefix        
+    testGroup="save file test" 
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}"  \
+             --params="--saveAll"  \
+             --expectedNbrFiles=2  \
+             --desc="save cypher query and text results default pre- and postfix."
+  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}"  \
+             --params="--saveCypher"  \
+             --expectedNbrFiles=1  \
+             --desc="save cypher query only file default postfix."
+  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="STDIN" --qry="${testSuccessQry}"  \
+             --params="--saveResults"  \
+             --expectedNbrFiles=1  \
+             --desc="save results file only default postfix."
+  
+    runShell --expectedRetCode=${RCODE_SUCCESS} --inputType="PIPE" --qry="${testSuccessQry}"  \
+             --params="--saveResults"  \
+             --expectedNbrFiles=1  \
+             --desc="file tests - save results file only default postfix."
+  
+    runShell --expectedRetCode=${RCODE_CYPHER_SHELL_ERROR} --inputType="STDIN" --qry="${testFailQry}"  \
+             --params="--saveResults"  \
+             --expectedNbrFiles=0 \
+             --desc="bad query input save results file that will not exist."
    
     break # made it to end, exit loop
   done

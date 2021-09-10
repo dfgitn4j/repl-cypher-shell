@@ -17,22 +17,24 @@ usage() {
 
   ** cypher-shell main options **
 
-  [-u | --username]  cypher-shell username parameter.
-  [-p | --password]  cypher-shell password parameter.
-  [-P | --param]     Parameter stings strings. Run --help for how to use.
-  [-f | --file]      File containing query.
-  [--format]         cypher-shell --format option.
+  [-u | --username] <username>           cypher-shell username parameter.
+  [-p | --password] <password>           cypher-shell password parameter.
+  [-P | --param]    <parameter string>   Parameter strings. 
+                                         Run --help for how to use.
+  [-f | --file]     <filename>           File containing query.
+  [--format]        {auto,verbose,plain} cypher-shell --format option.
   
   ** Query output save options **
 
-  [-A | --saveAll]     [allFilesPrefix]   Save cypher query and output results 
-                                          files with optional user set prefix.
-  [-R | --saveResults] [resultFilePrefix] Save each results output in to a file 
-                                          with optional user set prefix.
-  [-S | --saveCypher]  [cypherFilePrefix] Save each query statement in a file
-                                          with optional user set prefix.
-  [-D | --saveDir]     [dirPath]          Directory to save files to.  Default 
-                                          is ${DEF_SAVE_DIR} if dirPath is not provided. 
+  [-A | --saveAll]     [all_file_name]     Save cypher query and output results 
+                                           files with optional user set prefix.
+  [-R | --saveResults] [results_file_name] Save each results output in to a file 
+                                           with optional user set prefix.
+  [-S | --saveCypher]  [cypher_file_name]  Save each query statement in a file
+                                           with optional user set prefix.
+  [-D | --saveDir]     [save_dir]          Path to directory to save files to. Default 
+                                           is ${DEF_SAVE_DIR} if dirPath is not provided. 
+
 
   ** Editor options to use when running from command line **
 
@@ -53,7 +55,7 @@ usage() {
   [-1 | --one]             Run query execution loop only once and exit.
   [-X | --exitOnError]     Exit script on error.
 
-  ** Usage **
+  ** Usage / Help **
 
   [-U | --usage]           Command line parameter usage only.
   [-h | --help]            Detailed help message.
@@ -61,7 +63,21 @@ usage() {
   *** remaining parameters ***
 
   [*] ANY other parameters are passed through as is to cypher-shell.
-      Invalid parameters will be caught by cypher-shell.
+      Invalid parameters will be caught by cypher-shell.  
+
+  NOTE: 
+
+    Each file will have a counter appended to it when using the *Prefix options 
+    to define the leading file name string used for output files. Run --help to 
+    see the default file name formats.   
+
+    The file name extensions are set in code:
+  
+    DEF_QRY_FILE_EXTSN=${DEF_QRY_FILE_EXTSN} 
+    DEF_RESULTS_FILE_EXTSN=${DEF_RESULTS_FILE_EXTSN} 
+    DEF_OUTPUT_PREFIX=${DEF_OUTPUT_PREFIX} 
+    DEF_SAVE_DIR=${DEF_SAVE_DIR}       
+
 USAGE
   fi
 }
@@ -155,31 +171,31 @@ dashHelpOutput() {
   
     cypher shell version commands. Run and exit.
 
-  -A [allFilesPrefix] | --saveAll [allFilesPrefix])
+  -A [all_file_name] | --saveAll [all_file_name])
   
     Save all cypher queries and output in individual files in the current 
     directory. The default is to name the files with a timestamp and session 
     identifiers.  Files will be in current directory with the format:
   
-      cypher query: ${OUTPUT_FILES_PREFIX}_[datetime query was run]_[session ID]-[qry nbr]${QRY_FILE_POSTFIX}
-      results text: ${OUTPUT_FILES_PREFIX}_[datetime query was run]_[session ID]-[qry nbr]${RESULTS_FILE_POSTFIX}
+      cypher query: ${DEF_OUTPUT_PREFIX}_[datetime query was run]_[session ID]-[qry nbr]${DEF_QRY_FILE_EXTSN}
+      results text: ${DEF_OUTPUT_PREFIX}_[datetime query was run]_[session ID]-[qry nbr]${DEF_RESULTS_FILE_EXTSN}
   
       For example:
 
-      cypher query: $(printf "%s_%s_%s-%d%s" "${OUTPUT_FILES_PREFIX}" "$(date +%FT%I-%M-%S%p)" "${SESSION_ID}" 1 "${QRY_FILE_POSTFIX}")
-      results text: $(printf "%s_%s_%s-%d%s" "${OUTPUT_FILES_PREFIX}" "$(date +%FT%I-%M-%S%p)" "${SESSION_ID}" 1 "${RESULTS_FILE_POSTFIX}")
+      cypher query: $(printf "%s_%s_%s-%d%s" "${DEF_OUTPUT_PREFIX}" "$(date +%FT%I-%M-%S%p)" "${SESSION_ID}" 1 "${DEF_QRY_FILE_EXTSN}")
+      results text: $(printf "%s_%s_%s-%d%s" "${DEF_OUTPUT_PREFIX}" "$(date +%FT%I-%M-%S%p)" "${SESSION_ID}" 1 "${DEF_RESULTS_FILE_EXTSN}")
 
-    The optional parameter [allFilesPrefix]-[qry nbr].[cypher|txt] will be used instead of the default
+    The optional parameter [all_file_name]-[qry nbr].[cypher|txt] will be used instead of the default
     file naming above. 
   
-  -R [resultFilePrefix] | --saveResults [resultFilePrefix])
+  -R [results_file_name] | --saveResults [results_file_name])
       
     Save query results to a file in the current directory. The file will have the
     same timestamp and session identifier in the file name as the query results
     file if it is also kept.  Files will be in current directory with the
     format as described in --saveAll
 
-  -S [cypherFilePrefix] | --saveCypher [cypherFilePrefix])
+  -S [cypher_file_name] | --saveCypher [cypher_file_name])
   
     Save cypher query to a file in the current directory. The file will have the
     same timestamp and session identifier in the file name as the query results
@@ -400,9 +416,6 @@ setDefaults () {
   edit_cnt=0              # count number of queries run, controls stdin messaging.
   file_nbr=0              # output file number if query / results file(s) are saved
   # db_name=""            # will only be populated on neo4j 4.x databases
-  save_dir="./"           # directory to use for any output files, including tmp files
-  find_dir="."            # directory to use for find
-  DEF_SAVE_DIR="RCP_SAVE" # default save directory if none specified with --saveDir option
   lastCypherFile=""       # last cypher file != "" if using editor and saving files, used to keep editing same file
 
   CS_FORMAT_OPT="--format verbose " # need extra space at end for param validation test
@@ -412,30 +425,34 @@ setDefaults () {
 
    # variables used in file name creation
    # file patterns are in the form of:
-   # ${OUTPUT_FILES_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} (${QRY_FILE_POSTFIX}|${RESULTS_FILE_POSTFIX})
-  SESSION_ID="${RANDOM}" # nbr to id this session. For when keeping intermediate cypher files
-  QRY_FILE_POSTFIX=".cypher" # postfix for all intermediate files
-  RESULTS_FILE_POSTFIX=".txt"
-  OUTPUT_FILES_PREFIX="qry"  # prefix all intermediate files
+   # ${DEF_OUTPUT_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} (${DEF_QRY_FILE_EXTSN}|${DEF_RESULTS_FILE_EXTSN})
+  SESSION_ID="${RANDOM}" # nbr to id this session. For  intermediate cypher files
+  DEF_QRY_FILE_EXTSN=".cypher"   # query file extension
+  DEF_RESULTS_FILE_EXTSN=".txt"  # result file extension
+  DEF_OUTPUT_PREFIX="qry"        # default prefix for all files
+  DEF_SAVE_DIR="RCP_SAVE" # default save directory if none specified with --saveDir option
+  save_dir="./"           # directory to use for any output files, including tmp files
+  find_dir="."            # directory to use for find
 
-  TMP_DB_CONN_QRY_FILE="tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
-  TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
+
+  TMP_DB_CONN_QRY_FILE="tmpDbConnectTest.${SESSION_ID}${DEF_QRY_FILE_EXTSN}"
+  TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${DEF_RESULTS_FILE_EXTSN}"
   cypherRetCode=${RCODE_SUCCESS} # cypher-shell return code
 }
 
 ckSetVarValues() {
   # bad things can happen if any of these shell variables are not set
   if [[ ! -n ${SESSION_ID} || \
-        ! -n ${QRY_FILE_POSTFIX} || \
-        ! -n ${RESULTS_FILE_POSTFIX} || \
-        ! -n ${OUTPUT_FILES_PREFIX} || \
+        ! -n ${DEF_QRY_FILE_EXTSN} || \
+        ! -n ${DEF_RESULTS_FILE_EXTSN} || \
+        ! -n ${DEF_OUTPUT_PREFIX} || \
         ! -n ${TMP_DB_CONN_QRY_FILE} || \
         ! -n ${TMP_DB_CONN_RES_FILE} || \
         ! -n ${save_dir} ||
         ! -n ${find_dir} ]] ; then
     messageOutput "*** INTERNAL ERROR found by ckSetVarValues() - Missing needed internal shell variable. Sorry about that." Y "\n%s\n\n"
-    messageOutput "SESSION_ID='${SESSION_ID}' QRY_FILE_POSTFIX='${QRY_FILE_POSTFIX}' RESULTS_FILE_POSTFIX='${RESULTS_FILE_POSTFIX}'" N
-    messageOutput "OUTPUT_FILES_PREFIX='${OUTPUT_FILES_PREFIX}' TMP_DB_CONN_QRY_FILE='${TMP_DB_CONN_QRY_FILE}' TMP_DB_CONN_RES_FILE='${TMP_DB_CONN_RES_FILE}'" N
+    messageOutput "SESSION_ID='${SESSION_ID}' DEF_QRY_FILE_EXTSN='${DEF_QRY_FILE_EXTSN}' DEF_RESULTS_FILE_EXTSN='${DEF_RESULTS_FILE_EXTSN}'" N
+    messageOutput "DEF_OUTPUT_PREFIX='${DEF_OUTPUT_PREFIX}' TMP_DB_CONN_QRY_FILE='${TMP_DB_CONN_QRY_FILE}' TMP_DB_CONN_RES_FILE='${TMP_DB_CONN_RES_FILE}'" N
     messageOutput "save_dir='${save_dir}' find_dir='${find_dir}'" N
     exitShell ${RCODE_INTERNAL_ERROR}
   fi
@@ -511,7 +528,7 @@ getArgs() {
   save_cypher="N"            # save each query in own file
   save_results="N"           # save each query output in own file
   save_all="N"               # save cypher and results files
-  userSetSaveDir="N"         # Y if user defines a directory to save files to
+  user_def_dir="N"         # Y if user defines a directory to save files to
   show_cmd_line="N"          # show command line args in output
   inc_cypher="N"             # output query before results output
   inc_cypher_as_comment="N"  # output commented query before results output
@@ -584,8 +601,8 @@ getArgs() {
          save_all="Y"
          coll_args="${coll_args} ${_currentParam}"
          if [[ ${arg_shift_cnt} -eq 2 ]]; then 
-           resultFilePrefix=${arg_ret_opts}
-           cypherFilePrefix=${arg_ret_opts}
+           results_file_name=${arg_ret_opts}
+           cypher_file_name=${arg_ret_opts}
          elif [[ ${arg_shift_cnt} -gt 2 ]]; then
             messageOutput "Only one save all files prefix allowed. "  
             messageOutput "Invalid option: ${_currentParam}${arg_ret_opts}"
@@ -607,7 +624,7 @@ getArgs() {
            messageOutput "Goodbye."
            exitShell ${RCODE_INVALID_CMD_LINE_OPTS}
          fi
-         userSetSaveDir="Y"
+         user_def_dir="Y"
          shift "${arg_shift_cnt}" # go past number of params processed
          ;;
       -R | --saveResults ) # keep the cypher queries around for future use.
@@ -615,7 +632,7 @@ getArgs() {
          save_results="Y"
          coll_args="${coll_args} ${_currentParam} "
          if [[ ${arg_shift_cnt} -eq 2 ]]; then 
-           resultFilePrefix=${arg_ret_opts}
+           results_file_name=${arg_ret_opts}
          elif [[ ${arg_shift_cnt} -gt 2 ]]; then
             messageOutput "Only one save result file prefix allowed. "  
             messageOutput "Invalid option: ${_currentParam}${arg_ret_opts}"
@@ -629,7 +646,7 @@ getArgs() {
          save_cypher="Y"
          coll_args="${coll_args} ${_currentParam} "
          if [[ ${arg_shift_cnt} -eq 2 ]]; then 
-           cypherFilePrefix="${arg_ret_opts}"
+           cypher_file_name="${arg_ret_opts}"
          elif [[ ${arg_shift_cnt} -gt 2 ]]; then
             messageOutput "Only one save query file prefix allowed. "  
             messageOutput "Invalid option: ${_currentParam}${arg_ret_opts}"
@@ -774,7 +791,7 @@ getArgs() {
   elif [[ ${save_all} == "Y" ]] && [[ ${save_cypher} == "Y" || ${save_results} = "Y" ]]; then
     messageOutput "Cannot have save all set with either save cypher or results files simultaneously."
     return_code=${RCODE_INVALID_CMD_LINE_OPTS}
-  elif [[ ${userSetSaveDir} == "Y" && ${save_all} == "N" && ${save_cypher} == "N" && ${save_results} == "N" ]]; then
+  elif [[ ${user_def_dir} == "Y" && ${save_all} == "N" && ${save_cypher} == "N" && ${save_results} == "N" ]]; then
     messageOutput "Set save directory without saving cypher or results files."
     return_code=${RCODE_INVALID_CMD_LINE_OPTS}
   elif [[ -n ${editor_to_use} && ${run_once} == "Y" ]]; then
@@ -804,13 +821,13 @@ getArgs() {
 
    # validate write permissions
   local test_file="${save_dir}testDirPermissions.${RANDOM}.txt"
-  touch ${test_file} 2>/dev/null
+  touch "${test_file}" 2>/dev/null
   return_code=$?
   if [[ ${return_code} -ne 0 ]]; then
     messageOutput "Cannot write file to directory $(pwd)"
-     exitShell ${RCODE_NO_WRITE_PERM}
+    exitShell ${RCODE_NO_WRITE_PERM}
   else # can write file
-    rm -f ${test_file}
+    rm -f "${test_file}"
   fi
 
   if [[ ${show_cmd_line} == "Y" ]]; then # output command line args
@@ -840,8 +857,10 @@ validFirstChar() {
 }
 
 messageOutput() {  # to print or not to print
-  # Not all messages to to output, some go to tty and results file to stdout
-  # $1 is message $2 is optional format string for printf
+  # Note: not  all messages go to output, some go to tty and results file to stdout
+  # $1 is message 
+  # $2 is to use quotes to output string in one line  
+  # $3 format string for printf
   local _quote_string=${2:-"Y"}
   local _fmt_str=${3:-"%s\n"}
   if [[ ${quiet_output} == "N" ]]; then
@@ -950,7 +969,7 @@ outputQryRunMsg() {
 #
 existingFileCnt() {
   # $1 is directory, $2 is pattern
-  local ret=$(printf '%0d' $(find "${1}" -name "${2}" -type f -depth 1 | wc -l ) )
+  local ret=$(printf '%0d' $(find "${1}" -name "${2}" -type f -maxdepth 1 | wc -l ) )
   echo ${ret}
 }
 
@@ -970,7 +989,7 @@ exitCleanUp() {
   cleanupConnectFiles
 
   # current edit produced $_cypherFilePattern file may be empty on ctl-c or run_once with input file
-  find "${find_dir}" -depth 1 -type f -empty -name "${save_qry_pattern}"  -exec rm {} \; 2>/dev/null 
+  find "${find_dir}" -maxdepth 1 -type f -empty -name "${save_qry_pattern}"  -exec rm {} \; 2>/dev/null 
 
   [[ ${save_dir} != "./" ]] && _msg="in directory ${save_dir}"
   if [[ ${save_cypher} == "Y" || -s ${input_cypher_file_name} ]]; then
@@ -978,21 +997,21 @@ exitCleanUp() {
       _exist_file_cnt=$(existingFileCnt "${find_dir}" "${save_qry_pattern}")
       if [[ $_exist_file_cnt -ne 0 ]]; then
         [[ ${userDefQryPrefix} != "Y" ]] && _msg="with session id ${SESSION_ID} ${_msg}"
-        messageOutput "**** There is ${_exist_file_cnt} query $([[ ${_exist_file_cnt} -eq 1 ]] && printf '%s' 'file' || printf '%s' 'files') (${QRY_FILE_POSTFIX}) ${_msg} ****"
+        messageOutput "**** There is ${_exist_file_cnt} query $([[ ${_exist_file_cnt} -eq 1 ]] && printf '%s' 'file' || printf '%s' 'files') (${DEF_QRY_FILE_EXTSN}) ${_msg} ****"
       fi
     fi
   else # clean up any errant cypher query files
-    find "${find_dir}" -depth 1 -type f -name "${save_qry_pattern}" -exec rm {} \; 2>/dev/null 
+    find "${find_dir}" -maxdepth 1 -type f -name "${save_qry_pattern}" -exec rm {} \; 2>/dev/null 
   fi
 
   if [[ ${save_results} == "Y" && ${quiet_output} == "N" ]]; then
     _exist_file_cnt=$(existingFileCnt "${find_dir}" "${save_results_pattern}") 
     if [[ $_exist_file_cnt -ne 0 ]]; then
       [[ ${userDefResPrefix} != "Y" ]] && _msg="with session id ${SESSION_ID} ${_msg}"
-      messageOutput "**** There is ${_exist_file_cnt} result $([[ ${_exist_file_cnt} -eq 1 ]] && printf '%s' 'file' || printf '%s' 'files') (${RESULTS_FILE_POSTFIX}) ${_msg} ****"
+      messageOutput "**** There is ${_exist_file_cnt} result $([[ ${_exist_file_cnt} -eq 1 ]] && printf '%s' 'file' || printf '%s' 'files') (${DEF_RESULTS_FILE_EXTSN}) ${_msg} ****"
     fi
   elif [[ ${save_results} == "N" ]]; then # clean-up results files
-    find "${find_dir}" -type f -depth 1 -name "${save_results_pattern}" -exec rm {} \; 2>/dev/null 
+    find "${find_dir}" -type f -maxdepth 1 -name "${save_results_pattern}" -exec rm {} \; 2>/dev/null 
   fi 
 
   if [[ ${is_pipe} == "N" ]]; then
@@ -1008,50 +1027,49 @@ initIntermediateFiles () {
       cypherEditFile="${input_cypher_file_name}"
        
       if [[ ${save_cypher} == "Y" && -s ${input_cypher_file_name} ]]; then # save unaltered input file with a 0 file number when using an editor
-        saveOrigFile=$(echo "${cypherSaveFile}" | sed -e "s/1${QRY_FILE_POSTFIX}"/0${QRY_FILE_POSTFIX}/"")
+        saveOrigFile=$(echo "${cypherSaveFile}" | sed -e "s/1${DEF_QRY_FILE_EXTSN}"/0${DEF_QRY_FILE_EXTSN}/"")
         cp "${input_cypher_file_name}" "${saveOrigFile}"
-        # cp "${input_cypher_file_name}" "$(echo \""${cypherSaveFile}"\"" | sed -e \""s/1${QRY_FILE_POSTFIX}/0${QRY_FILE_POSTFIX}/"\")"
+        # cp "${input_cypher_file_name}" "$(echo \""${cypherSaveFile}"\"" | sed -e \""s/1${DEF_QRY_FILE_EXTSN}/0${DEF_QRY_FILE_EXTSN}/"\")"
       fi
     else # use save file as the edit file
       cypherEditFile="${cypherSaveFile}"
       cp "${input_cypher_file_name}" "${cypherEditFile}"
     fi
   else
-
     cypherEditFile="${cypherSaveFile}"
   fi
 }
 
 initFileStrings() {
-  # prefix can be passed in cypherFilePrefix, or default OUTPUT_FILES_PREFIX
-  if [[ ! -n ${cypherFilePrefix} ]]; then  
-    cypherFilePrefix="${OUTPUT_FILES_PREFIX}" 
+  # prefix can be passed in cypher_file_name, or default DEF_OUTPUT_PREFIX
+  if [[ ! -n ${cypher_file_name} ]]; then  
+    cypher_file_name="${DEF_OUTPUT_PREFIX}" 
     userDefQryPrefix="N"
   else
     userDefQryPrefix="Y"
   fi
-  if [[ ! -n ${resultFilePrefix} ]]; then  
-    resultFilePrefix="${OUTPUT_FILES_PREFIX}" 
+  if [[ ! -n ${results_file_name} ]]; then  
+    results_file_name="${DEF_OUTPUT_PREFIX}" 
     userDefResPrefix="N"
   else
     userDefResPrefix="Y"
   fi
 
   # add $save_dir directory prefix to tmp variables
-  TMP_DB_CONN_QRY_FILE="${save_dir}tmpDbConnectTest.${SESSION_ID}${QRY_FILE_POSTFIX}"
-  TMP_DB_CONN_RES_FILE="${save_dir}tmpDbConnectTest.${SESSION_ID}${RESULTS_FILE_POSTFIX}"
+  TMP_DB_CONN_QRY_FILE="${save_dir}tmpDbConnectTest.${SESSION_ID}${DEF_QRY_FILE_EXTSN}"
+  TMP_DB_CONN_RES_FILE="${save_dir}tmpDbConnectTest.${SESSION_ID}${DEF_RESULTS_FILE_EXTSN}"
 
   # output file patterns
   if [[ ${userDefQryPrefix} == "Y" ]]; then
-    save_qry_pattern="${cypherFilePrefix}*${QRY_FILE_POSTFIX}"
+    save_qry_pattern="${cypher_file_name}*${DEF_QRY_FILE_EXTSN}"
   else
-    save_qry_pattern="${cypherFilePrefix}*${SESSION_ID}*${QRY_FILE_POSTFIX}"
+    save_qry_pattern="${cypher_file_name}*${SESSION_ID}*${DEF_QRY_FILE_EXTSN}"
   fi
 
   if [[ ${userDefResPrefix} == "Y" ]]; then
-    save_results_pattern="${resultFilePrefix}*${RESULTS_FILE_POSTFIX}"
+    save_results_pattern="${results_file_name}*${DEF_RESULTS_FILE_EXTSN}"
   else
-    save_results_pattern="${resultFilePrefix}*${SESSION_ID}*${RESULTS_FILE_POSTFIX}"
+    save_results_pattern="${results_file_name}*${SESSION_ID}*${DEF_RESULTS_FILE_EXTSN}"
   fi
 }
 
@@ -1061,15 +1079,15 @@ generateFileNames() {
   date_stamp=$(date +%FT%I-%M-%S%p) # avoid ':' sublime interprets : as line / col numbers
   
   if [[ ${userDefQryPrefix} == "Y" ]]; then
-    printf -v cypherSaveFile "%s%s-%02d%s" "${save_dir}" "${cypherFilePrefix}" ${file_nbr} "${QRY_FILE_POSTFIX}"
+    printf -v cypherSaveFile "%s%s-%02d%s" "${save_dir}" "${cypher_file_name}" ${file_nbr} "${DEF_QRY_FILE_EXTSN}"
   else
-    printf -v cypherSaveFile "%s%s_%s_%s-%d%s" "${save_dir}" "${cypherFilePrefix}" "${date_stamp}" "${SESSION_ID}" ${file_nbr} "${QRY_FILE_POSTFIX}"
+    printf -v cypherSaveFile "%s%s_%s_%s-%d%s" "${save_dir}" "${cypher_file_name}" "${date_stamp}" "${SESSION_ID}" ${file_nbr} "${DEF_QRY_FILE_EXTSN}"
   fi
 
   if [[ ${userDefResPrefix} == "Y" ]]; then
-    printf -v resultSaveFile "%s%s-%02d%s" "${save_dir}" "${resultFilePrefix}" ${file_nbr} "${RESULTS_FILE_POSTFIX}"
+    printf -v resultSaveFile "%s%s-%02d%s" "${save_dir}" "${results_file_name}" ${file_nbr} "${DEF_RESULTS_FILE_EXTSN}"
   else
-    printf -v resultSaveFile "%s%s_%s_%s-%d%s" "${save_dir}" "${resultFilePrefix}" "${date_stamp}" "${SESSION_ID}" ${file_nbr} "${RESULTS_FILE_POSTFIX}"
+    printf -v resultSaveFile "%s%s_%s_%s-%d%s" "${save_dir}" "${results_file_name}" "${date_stamp}" "${SESSION_ID}" ${file_nbr} "${DEF_RESULTS_FILE_EXTSN}"
   fi
 }
 
@@ -1193,8 +1211,7 @@ runInternalCypher() {
   eval "'${use_this_cypher_shell}'" "${user_name}" "${user_password}" "${db_cmd_arg}" "${cypherShellArgs}"  --format plain < "${_qry_file}" > "${_out_file}" 2>&1
   cypherRetCode=$?
   if [[ ${cypherRetCode} -ne 0 ]]; then
-    messageOutput ""
-    messageOutput ""
+    messageOutput "" "N" "\n\n"
     messageOutput "ERROR: cypher-shell generated error"
     messageOutput "Using this cypher-shell: ${use_this_cypher_shell}"
     messageOutput "cypher-shell return code: ${cypherRetCode}"
@@ -1202,8 +1219,7 @@ runInternalCypher() {
     messageOutput "Arguments passed to cypher-shell: ${cypherShellArgs}"
     messageOutput "cypher-shell output:"
     messageOutput "$(cat "${_out_file}")"
-    messageOutput ""
-    messageOutput ""
+    messageOutput "" "N" "\n\n"
 
     exitShell ${cypherRetCode}
   fi
