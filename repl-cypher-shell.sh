@@ -71,7 +71,7 @@ usage() {
     to define the leading file name string used for output files. Run --help to 
     see the default file name formats.   
 
-    The file name extensions are set in code:
+    The file name extensions are set via environment vars or with the defaults:
   
     DEF_QRY_FILE_EXTSN=${DEF_QRY_FILE_EXTSN} 
     DEF_RESULTS_FILE_EXTSN=${DEF_RESULTS_FILE_EXTSN} 
@@ -418,7 +418,7 @@ setDefaults () {
   # db_name=""            # will only be populated on neo4j 4.x databases
   lastCypherFile=""       # last cypher file != "" if using editor and saving files, used to keep editing same file
 
-  CS_FORMAT_OPT="--format verbose " # need extra space at end for param validation test
+  CS_FORMAT_OPT="--format verbose " # default cypher format opt. need extra space at end for param validation test
   LESS_DEF_OPT="--LONG-PROMPT --shift .005"
   VI_INITIAL_OPEN_OPTS=' +star '  # Start first exec for vi in append mode.
 
@@ -427,13 +427,11 @@ setDefaults () {
    # file patterns are in the form of:
    # ${DEF_OUTPUT_PREFIX} ${date_stamp} ${SESSION_ID} ${file_nbr} (${DEF_QRY_FILE_EXTSN}|${DEF_RESULTS_FILE_EXTSN})
   SESSION_ID="${RANDOM}" # nbr to id this session. For  intermediate cypher files
-  DEF_QRY_FILE_EXTSN=".cypher"   # query file extension
-  DEF_RESULTS_FILE_EXTSN=".txt"  # result file extension
-  DEF_OUTPUT_PREFIX="qry"        # default prefix for all files
-  DEF_SAVE_DIR="RCP_SAVE" # default save directory if none specified with --saveDir option
-  save_dir="./"           # directory to use for any output files, including tmp files
-  find_dir="."            # directory to use for find
-
+  DEF_QRY_FILE_EXTSN=${DEF_QRY_FILE_EXTSN:-".cypher"}     # query file extension env var
+  DEF_RESULTS_FILE_EXTSN=${DEF_RESULT_FILE_EXTSN:-".txt"} # result file extension 
+  DEF_OUTPUT_PREFIX=${DEF_OUTPUT_PREFIX:-"qry"}           # default prefix for all files
+  save_dir=${DEF_SAVE_DIR:-"./"} # default save directory if none specified with --saveDir option or env var DEF_SAVE_DIR
+  find_dir="."                   # directory to use for find(1) calls
 
   TMP_DB_CONN_QRY_FILE="tmpDbConnectTest.${SESSION_ID}${DEF_QRY_FILE_EXTSN}"
   TMP_DB_CONN_RES_FILE="tmpDbConnectTest.${SESSION_ID}${DEF_RESULTS_FILE_EXTSN}"
@@ -755,11 +753,11 @@ getArgs() {
          break # done with loop
          ;;
 
-        # treat everything elase as cypher-shell commands.  cypher-shell call
+        # treat everything else as cypher-shell commands.  cypher-shell call
       *)
          getOptArgs -1 "$@"
-         cypherShellArgs="${cypherShellArgs} ${_currentParam} ${arg_ret_opts}"
-         #cypherShellArgs="${cypherShellArgs} ${_currentParam}"
+         # cypherShellArgs="${cypherShellArgs} ${_currentParam} ${arg_ret_opts}"
+         cypherShellArgs="${cypherShellArgs} ${_currentParam}"
          shift "${arg_shift_cnt}" # go past number of params processed
          coll_args="${coll_args} ${cypherShellArgs}"
          ;;
@@ -879,7 +877,8 @@ enterYesNoQuit() {
   local _ret_code=0
   local _option
 
-  [[ ${is_pipe} == "Y" ]] && return # pipe, no inteactive input
+  # pipe or quiet output options skip to cleanup options
+  [[ ${is_pipe} == "Y" || ${quiet_output} == "Y" ]] && return # pipe, no inteactive input
 
   local _valid_opts="${1:-ynq}"
   local _msg=${2:-"<Enter> | y <Enter> to continue, n <Enter> to return, q <Enter> to quit."}
@@ -1210,6 +1209,7 @@ runInternalCypher() {
    # cypher-shell with no formatting args to be able to parse the output string
   eval "'${use_this_cypher_shell}'" "${user_name}" "${user_password}" "${db_cmd_arg}" "${cypherShellArgs}"  --format plain < "${_qry_file}" > "${_out_file}" 2>&1
   cypherRetCode=$?
+
   if [[ ${cypherRetCode} -ne 0 ]]; then
     messageOutput "" "N" "\n\n"
     messageOutput "ERROR: cypher-shell generated error"
@@ -1239,17 +1239,17 @@ verifyCypherShell() {
   cleanupConnectFiles
 }
 
-get4xDbName() {
+getDbName() {
   # db_name not set, and 4.x ver of Neo4j
 
-  if [[ ${db_version} == *'4.'* ]]; then
+  # if [[ ${db_version} == *'4.'* ]]; then
     echo "${DB_4x_NAME_QRY}"  > ${TMP_DB_CONN_QRY_FILE}    # get database name query
     runInternalCypher "${TMP_DB_CONN_QRY_FILE}" "${TMP_DB_CONN_RES_FILE}"  
     msg_arr=($(tail -1 "${TMP_DB_CONN_RES_FILE}" | tr ', ' '\n')) # tr for macOS
     db_name="${msg_arr[@]:0:1}"
     old_db_name="${db_name}"
     cleanupConnectFiles
-  fi
+  # fi
 }
 
 setCypherShellCmdLine() {
@@ -1258,7 +1258,7 @@ setCypherShellCmdLine() {
 }
 
 #
-# RUN CYPHER
+# Functions for running cypher
 #
 consumeStdIn() {
   # There can be after error text being sent to an embedded terminal that should be discarded
@@ -1294,7 +1294,7 @@ findColonUseStmnt() {
 cleanAndRunCypher() {
   clear
   
-  if [[ ! -f ${cypherEditFile} ]]; then # did not write 1st file with editor
+  if [[ ! -f ${cypherEditFile} ]]; then # no cypher to run
     contOrExitOnEmptyFile
   else
     sed -i '' "/.*${SHELL_NAME}.*/d" "${cypherEditFile}"  # delete line with a call to this shell if necessary
@@ -1317,7 +1317,7 @@ cleanAndRunCypher() {
               if [[ ${inc_cypher} == "Y" ]];then cat ${cypherEditFile}; printf '\n'; fi;  \
               if [[ ${inc_cypher_as_comment} == "Y" ]];then sed -e 's/^/\/\/ /' \""${cypherEditFile}"\"; printf '\n'; fi;  \
               ${cypher_shell_cmd_line} < \""${cypherEditFile}"\"  2>&1" | tee  "${resultSaveFile}" | less ${less_options} 
-      else 
+      else # run and pipe output file to less
         eval "[[ ${show_cmd_line} == "Y" ]] && printf '// Command line args: %s\n' \""${cmd_arg_msg}"\"; \
               [[ ${qry_start_time} == "Y" ]] && printf '// Query started: %s\n' \""$(date)"\";  \
               if [[ ${inc_cypher} == "Y" ]];then cat \""${cypherEditFile}"\"; printf '\n'; fi;  \
@@ -1345,7 +1345,7 @@ getCypherText() {
     if [[ -s ${cypherEditFile} ]]; then 
       cat "${cypherEditFile}"  # output existing text
     fi
-     # read with -i would be very usefule here.  Not on mac
+     # read with -i would be very useful here.  Not on mac
     local old_ifs=${IFS}
     while IFS= read -r line; do
       printf '%s\n' "$line" >> "${cypherEditFile}"
@@ -1418,8 +1418,8 @@ initFileStrings
 [[ ${is_pipe} == "N" ]] && clear 
 
 haveCypherShell        # verify that you can reach a cypher-shell executable
-verifyCypherShell      # verify that can connect to cypher-shell
-get4xDbName            # get database name if using 4.x
+verifyCypherShell      # verify that can connect to a database with cypher-shell
+getDbName            # get database name if using 4.x
 fmtCurrentDbCmdArg     # use 'current db' for db_cmd_arg
 runCypherShellInfoCmd  # if info run cmd and exit
 initIntermediateFiles  # set vars for query and results files
